@@ -3,10 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { patientFormSchema, toFhirPatient, type PatientFormValues } from '@/lib/patientSchema';
 import { fetchPatient, postPatient, putPatient } from '@/lib/fhirClient';
 import { extractGivenName, extractFamilyName } from '@/lib/patientUtils';
@@ -17,10 +15,11 @@ type FormMode = 'create' | 'edit';
 interface PatientFormProps {
   mode: FormMode;
   patientId?: string;
+  onSuccess: (id: string | undefined) => void;
+  onCancel: () => void;
 }
 
-export function PatientForm({ mode, patientId }: PatientFormProps) {
-  const router = useRouter();
+export function PatientForm({ mode, patientId, onSuccess, onCancel }: PatientFormProps) {
   const queryClient = useQueryClient();
   const [submitError, setSubmitError] = useState<string | undefined>();
 
@@ -60,8 +59,7 @@ export function PatientForm({ mode, patientId }: PatientFormProps) {
     mutationFn: (values: PatientFormValues) => postPatient(toFhirPatient(values)),
     onSuccess: (patient) => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
-      if (patient.id) router.push(`/patients/${patient.id}`);
-      else router.push('/');
+      onSuccess(patient.id);
     },
     onError: (err) => setSubmitError(err instanceof Error ? err.message : 'Failed to create patient'),
   });
@@ -72,7 +70,7 @@ export function PatientForm({ mode, patientId }: PatientFormProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patient', patientId] });
       queryClient.invalidateQueries({ queryKey: ['patients'] });
-      router.push(`/patients/${patientId}`);
+      onSuccess(patientId);
     },
     onError: (err) => setSubmitError(err instanceof Error ? err.message : 'Failed to update patient'),
   });
@@ -90,97 +88,78 @@ export function PatientForm({ mode, patientId }: PatientFormProps) {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link
-            href={mode === 'edit' && patientId ? `/patients/${patientId}` : '/'}
-            className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Link>
-          <h1 className="mt-1 text-xl font-semibold text-slate-900">
-            {mode === 'create' ? 'New patient' : 'Edit patient'}
-          </h1>
-        </div>
-      </div>
-
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
       {submitError && <ErrorPanel title="Submission failed" message={submitError} />}
 
-      <form
-        onSubmit={handleSubmit(onSubmit)}
-        className="space-y-4 rounded-xl border border-slate-200 bg-white p-5"
-        noValidate
-      >
-        <Field label="Given name" error={errors.givenName?.message} htmlFor="givenName">
-          <input
-            id="givenName"
-            type="text"
-            autoComplete="given-name"
-            aria-invalid={!!errors.givenName}
-            {...register('givenName')}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-          />
-        </Field>
+      <Field label="Given name" error={errors.givenName?.message} htmlFor="givenName">
+        <input
+          id="givenName"
+          type="text"
+          autoComplete="given-name"
+          aria-invalid={!!errors.givenName}
+          {...register('givenName')}
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+        />
+      </Field>
 
-        <Field label="Family name" error={errors.familyName?.message} htmlFor="familyName">
-          <input
-            id="familyName"
-            type="text"
-            autoComplete="family-name"
-            aria-invalid={!!errors.familyName}
-            {...register('familyName')}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-          />
-        </Field>
+      <Field label="Family name" error={errors.familyName?.message} htmlFor="familyName">
+        <input
+          id="familyName"
+          type="text"
+          autoComplete="family-name"
+          aria-invalid={!!errors.familyName}
+          {...register('familyName')}
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+        />
+      </Field>
 
-        <Field label="Gender" error={errors.gender?.message} htmlFor="gender">
-          <select
-            id="gender"
-            aria-invalid={!!errors.gender}
-            {...register('gender')}
-            defaultValue=""
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-          >
-            <option value="" disabled>
-              Select gender…
-            </option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="other">Other</option>
-            <option value="unknown">Unknown</option>
-          </select>
-        </Field>
+      <Field label="Gender" error={errors.gender?.message} htmlFor="gender">
+        <select
+          id="gender"
+          aria-invalid={!!errors.gender}
+          {...register('gender')}
+          defaultValue=""
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+        >
+          <option value="" disabled>
+            Select gender…
+          </option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+          <option value="other">Other</option>
+          <option value="unknown">Unknown</option>
+        </select>
+      </Field>
 
-        <Field label="Date of birth" error={errors.birthDate?.message} htmlFor="birthDate">
-          <input
-            id="birthDate"
-            type="date"
-            aria-invalid={!!errors.birthDate}
-            {...register('birthDate')}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
-          />
-        </Field>
+      <Field label="Date of birth" error={errors.birthDate?.message} htmlFor="birthDate">
+        <input
+          id="birthDate"
+          type="date"
+          aria-invalid={!!errors.birthDate}
+          {...register('birthDate')}
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+        />
+      </Field>
 
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <Link
-            href={mode === 'edit' && patientId ? `/patients/${patientId}` : '/'}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-          >
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Save className="h-4 w-4" />
-            {busy ? 'Saving…' : mode === 'create' ? 'Create patient' : 'Save changes'}
-          </button>
-        </div>
-      </form>
-    </div>
+      <div className="flex items-center justify-end gap-2 pt-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Save className="h-4 w-4" />
+          {busy ? 'Saving…' : mode === 'create' ? 'Create patient' : 'Save changes'}
+        </button>
+      </div>
+    </form>
   );
 }
 

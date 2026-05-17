@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ArrowLeft, Pencil } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { usePatientDetail } from '@/hooks/usePatientDetail';
 import { buildVitalSnapshot } from '@/lib/vitalsUtils';
 import { computeSepsisScore } from '@/lib/scoring';
@@ -15,11 +15,14 @@ import { VitalsGrid } from '@/components/vitals/VitalsGrid';
 import { VitalsTrendChart } from '@/components/vitals/VitalsTrendChart';
 import { ConditionsList } from '@/components/conditions/ConditionsList';
 import { MedicationsList } from '@/components/medications/MedicationsList';
+import { PatientForm } from './PatientForm';
+import { Modal } from '@/components/ui/Modal';
 import { SkeletonCard } from '@/components/ui/SkeletonCard';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 
 export function PatientDetailClient({ patientId }: { patientId: string }) {
   const { patient, vitals, conditions, medications } = usePatientDetail(patientId);
+  const [editOpen, setEditOpen] = useState(false);
 
   const snapshot = useMemo(() => (vitals.data ? buildVitalSnapshot(vitals.data) : undefined), [vitals.data]);
   const score = useMemo(() => (snapshot ? computeSepsisScore(snapshot) : undefined), [snapshot]);
@@ -73,13 +76,14 @@ export function PatientDetailClient({ patientId }: { patientId: string }) {
           <div className="flex items-center gap-3">
             {score ? <RiskBadge tier={score.tier} size="md" /> : null}
             {pt?.id && (
-              <Link
-                href={`/patients/${pt.id}/edit`}
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
               >
                 <Pencil className="h-3.5 w-3.5" />
                 Edit
-              </Link>
+              </button>
             )}
           </div>
         </div>
@@ -145,6 +149,15 @@ export function PatientDetailClient({ patientId }: { patientId: string }) {
           <MedicationsList bundle={medications.data} />
         )}
       </section>
+
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit patient">
+        <PatientForm
+          mode="edit"
+          patientId={patientId}
+          onSuccess={() => setEditOpen(false)}
+          onCancel={() => setEditOpen(false)}
+        />
+      </Modal>
     </div>
   );
 }

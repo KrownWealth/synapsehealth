@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowDownUp, Plus } from 'lucide-react';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { usePatients } from '@/hooks/usePatients';
@@ -11,7 +11,9 @@ import { buildVitalSnapshot } from '@/lib/vitalsUtils';
 import { computeSepsisScore } from '@/lib/scoring';
 import { TIER_RANK } from '@/lib/riskConfig';
 import { PatientCard } from './PatientCard';
+import { PatientForm } from './PatientForm';
 import { SearchBar } from './SearchBar';
+import { Modal } from '@/components/ui/Modal';
 import { SkeletonGrid } from '@/components/ui/SkeletonCard';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -19,10 +21,12 @@ import { EmptyState } from '@/components/ui/EmptyState';
 type SortMode = 'risk' | 'alpha';
 
 export function PatientListClient() {
+  const router = useRouter();
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('risk');
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -93,13 +97,14 @@ export function PatientListClient() {
             <ArrowDownUp className="h-4 w-4" />
             Sort: {sortMode === 'risk' ? 'Risk' : 'Name'}
           </button>
-          <Link
-            href="/patients/new"
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
           >
             <Plus className="h-4 w-4" />
             Add patient
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -119,13 +124,14 @@ export function PatientListClient() {
           message={debouncedSearch ? 'Try a different search term.' : 'Add your first patient to get started.'}
           action={
             !debouncedSearch ? (
-              <Link
-                href="/patients/new"
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
               >
                 <Plus className="h-4 w-4" />
                 Add patient
-              </Link>
+              </button>
             ) : undefined
           }
         />
@@ -163,6 +169,17 @@ export function PatientListClient() {
           </button>
         </div>
       )}
+
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New patient">
+        <PatientForm
+          mode="create"
+          onSuccess={(id) => {
+            setCreateOpen(false);
+            if (id) router.push(`/patients/${id}`);
+          }}
+          onCancel={() => setCreateOpen(false)}
+        />
+      </Modal>
     </div>
   );
 }
