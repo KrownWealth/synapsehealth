@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import {
   Activity,
   FileText,
   LayoutDashboard,
   ListTodo,
+  LogOut,
   Users,
   X,
   type LucideIcon,
@@ -150,7 +152,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         />
       </nav>
 
-      <div className="border-t border-slate-200 px-4 py-3">
+      <div className="space-y-2 border-t border-slate-200 px-4 py-3">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
             DH
@@ -160,8 +162,38 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <p className="truncate text-[10px] text-slate-500">Internal Medicine · Demo</p>
           </div>
         </div>
+        <SignOutButton onNavigate={onNavigate} />
       </div>
     </aside>
+  );
+}
+
+function SignOutButton({ onNavigate }: { onNavigate?: () => void }) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const handleSignOut = async () => {
+    onNavigate?.();
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // Even if the network call fails, force the client out — middleware will catch any
+      // request that bypasses the cookie clear and redirect to /login.
+    }
+    queryClient.clear();
+    router.replace('/login');
+    router.refresh();
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleSignOut}
+      className="inline-flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+    >
+      <LogOut className="h-3.5 w-3.5" aria-hidden={true} />
+      Sign out
+    </button>
   );
 }
 

@@ -96,7 +96,7 @@ export function PriorAuthOutbox() {
         <div className="col-span-3">Submitted</div>
         <div className="col-span-3">Patient</div>
         <div className="col-span-3">Medication</div>
-        <div className="col-span-2">Provider</div>
+        <div className="col-span-2">Practitioner</div>
         <div className="col-span-1"></div>
       </div>
       <ul className="divide-y divide-slate-100">

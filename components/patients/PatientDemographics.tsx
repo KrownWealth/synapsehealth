@@ -59,19 +59,6 @@ export function PatientDemographics({ patient }: { patient: fhir4.Patient | unde
       </div>
 
       <dl className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-slate-200 px-5 py-4 text-sm sm:grid-cols-2">
-        <Row label="Identifiers">
-          {identifiers.length === 0 ? (
-            <span className="text-slate-400">—</span>
-          ) : (
-            <ul className="space-y-0.5">
-              {identifiers.map((i, idx) => (
-                <li key={idx}>
-                  <span className="text-slate-500">{i.type}:</span> <code className="text-xs">{i.value}</code>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Row>
         <Row label="Marital status">{maritalStatus ?? <span className="text-slate-400">—</span>}</Row>
         <Row label="Address">{address ?? <span className="text-slate-400">—</span>}</Row>
         <Row label="Languages">{languages.length ? languages.join(', ') : <span className="text-slate-400">—</span>}</Row>
@@ -102,7 +89,7 @@ export function PatientDemographics({ patient }: { patient: fhir4.Patient | unde
       </button>
       {showRaw && (
         <pre className="overflow-x-auto bg-slate-900 px-5 py-3 text-[11px] leading-relaxed text-slate-100">
-{JSON.stringify(patient, null, 2)}
+          {JSON.stringify(patient, null, 2)}
         </pre>
       )}
     </section>

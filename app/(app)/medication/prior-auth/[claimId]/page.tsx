@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, ExternalLink, User } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, User } from 'lucide-react';
 import { fhirServerFetch, FhirError } from '@/lib/fhirServer';
 import { formatDateTime } from '@/lib/dateUtils';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
@@ -133,7 +133,7 @@ export default async function PriorAuthDetailPage({
             Da Vinci PAS
           </span>
         </div>
-        <h1 className="text-2xl font-semibold text-slate-900">{medication}</h1>
+        <h1 className="text-lg md:text-xl lg:text-2xl font-semibold text-slate-900">{medication}</h1>
         <p className="text-sm text-slate-600">
           for <span className="font-medium text-slate-900">{patientName}</span>
         </p>
@@ -141,7 +141,7 @@ export default async function PriorAuthDetailPage({
 
       <section className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
         <Meta label="Submitted" value={formatDateTime(claim.created)} />
-        <Meta label="Provider" value={claim.provider?.display ?? '—'} />
+        <Meta label="Practitioner" value={claim.provider?.display ?? '—'} />
         <Meta label="Payer" value={`${payor}${coverageType !== '—' ? ` (${coverageType})` : ''}`} />
         <Meta
           label="RxNorm"
@@ -176,7 +176,7 @@ export default async function PriorAuthDetailPage({
               return (
                 <li
                   key={`${ref}-${i}`}
-                  className="flex items-start gap-3 border-b border-slate-100 px-3 py-2 last:border-0"
+                  className="flex flex-col md:flex-row items-start gap-3 border-b border-slate-100 px-3 py-2 last:border-0"
                 >
                   <code className="flex-shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700">
                     {type ?? 'Resource'}/{id?.slice(0, 8) ?? '?'}…
@@ -189,20 +189,6 @@ export default async function PriorAuthDetailPage({
         </section>
       )}
 
-      <section className="space-y-2">
-        <details className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <summary className="cursor-pointer px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-            View full FHIR JSON
-          </summary>
-          <pre className="max-h-96 overflow-x-auto bg-slate-900 px-4 py-3 text-[11px] leading-relaxed text-slate-100">
-            {JSON.stringify(claim, null, 2)}
-          </pre>
-        </details>
-        <p className="text-[11px] text-slate-500">
-          <ExternalLink className="mr-1 inline h-3 w-3" />
-          FHIR resource id: <code>Claim/{claim.id}</code>
-        </p>
-      </section>
     </div>
   );
 }
