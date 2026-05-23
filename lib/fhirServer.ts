@@ -2,6 +2,7 @@ import "server-only";
 
 const FHIR_BASE = process.env.FHIR_BASE_URL;
 const FHIR_TOKEN = process.env.FHIR_SERVER_TOKEN ?? process.env.FHIR_AUTH_TOKEN;
+const FHIR_TIMEOUT_MS = Number(process.env.FHIR_TIMEOUT_MS) || 30_000;
 
 const ACCEPT_HEADER: HeadersInit = { Accept: "application/fhir+json" };
 const WRITE_HEADERS: HeadersInit = {
@@ -40,7 +41,7 @@ export async function fhirServerFetch<T>(
     throw new Error("FHIR_BASE_URL is not set. Configure it in .env.local.");
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+  const timeoutId = setTimeout(() => controller.abort(), FHIR_TIMEOUT_MS);
   const method = init?.method ?? "GET";
   const started = Date.now();
 
@@ -74,7 +75,7 @@ export async function fhirServerFetch<T>(
     if (err instanceof FhirError) throw err;
     if (err instanceof Error && err.name === "AbortError") {
       logFhirAccess(method, path, 0, Date.now() - started);
-      throw new Error("FHIR server timed out after 10 seconds.");
+      throw new Error(`FHIR server timed out after ${Math.round(FHIR_TIMEOUT_MS / 1000)} seconds.`);
     }
     logFhirAccess(method, path, 0, Date.now() - started);
     throw err;
@@ -91,41 +92,79 @@ export const getPatients = (page = 0, count = 20) =>
 export const getPatient = (id: string) =>
   fhirServerFetch<fhir4.Patient>(`/Patient/${id}`);
 
-export const createPatient = (resource: fhir4.Patient) =>
-  fhirServerFetch<fhir4.Patient>("/Patient", {
-    method: "POST",
-    body: JSON.stringify(resource),
-  });
-
-export const updatePatient = (id: string, resource: fhir4.Patient) =>
-  fhirServerFetch<fhir4.Patient>(`/Patient/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(resource),
-  });
-
 export const searchPatientsByName = (name: string) =>
   fhirServerFetch<fhir4.Bundle>(
     `/Patient?name=${encodeURIComponent(name)}&_count=50`,
   );
 
-export const getVitals = (patientId: string) =>
-  fhirServerFetch<fhir4.Bundle>(
-    `/Observation?patient=${patientId}&category=vital-signs&_sort=-date&_count=20`,
-  );
-
-export const getVitalsTrend = (patientId: string) => {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+// Cross-patient queries for the dashboard worklist.
+// Filtering by an explicit patient OR list because there are orphan
+// MedicationRequests on the server from earlier uploads.
+export const getActiveMedicationsAcrossPatients = (patientIds: string[]) => {
+  if (patientIds.length === 0) {
+    return Promise.resolve({ resourceType: 'Bundle', type: 'searchset', entry: [] } as fhir4.Bundle);
+  }
+  const orList = patientIds.map((id) => `Patient/${id}`).join(',');
   return fhirServerFetch<fhir4.Bundle>(
-    `/Observation?patient=${patientId}&category=vital-signs&date=ge${since}&_sort=date&_count=100`,
+    `/MedicationRequest?status=active&patient=${encodeURIComponent(orList)}&_count=200`,
   );
 };
 
+// Cross-patient prior-authorization Claim query (Da Vinci PAS).
+// A submitted PA is a Claim with use=preauthorization whose `prescription`
+// references the MedicationRequest. The dashboard scans these to mark
+// worklist rows as submitted.
+export const getAllPreAuthClaimsForPatients = (patientIds: string[]) => {
+  if (patientIds.length === 0) {
+    return Promise.resolve({ resourceType: 'Bundle', type: 'searchset', entry: [] } as fhir4.Bundle);
+  }
+  const orList = patientIds.map((id) => `Patient/${id}`).join(',');
+  return fhirServerFetch<fhir4.Bundle>(
+    `/Claim?use=preauthorization&patient=${encodeURIComponent(orList)}&_count=200`,
+  );
+};
+
+export const getObservations = (patientId: string) =>
+  fhirServerFetch<fhir4.Bundle>(
+    `/Observation?patient=${patientId}&_count=50`,
+  );
+
 export const getConditions = (patientId: string) =>
   fhirServerFetch<fhir4.Bundle>(
-    `/Condition?patient=${patientId}&clinical-status=active&_sort=-recorded-date`,
+    `/Condition?patient=${patientId}&_count=50`,
   );
 
 export const getMedications = (patientId: string) =>
   fhirServerFetch<fhir4.Bundle>(
-    `/MedicationRequest?patient=${patientId}&status=active&_sort=-authoredon`,
+    `/MedicationRequest?patient=${patientId}&_count=50`,
+  );
+
+export const getAllergies = (patientId: string) =>
+  fhirServerFetch<fhir4.Bundle>(
+    `/AllergyIntolerance?patient=${patientId}&_count=50`,
+  );
+
+export const getImmunizations = (patientId: string) =>
+  fhirServerFetch<fhir4.Bundle>(
+    `/Immunization?patient=${patientId}&_count=50`,
+  );
+
+export const getEncounters = (patientId: string) =>
+  fhirServerFetch<fhir4.Bundle>(
+    `/Encounter?patient=${patientId}&_count=50`,
+  );
+
+export const getProcedures = (patientId: string) =>
+  fhirServerFetch<fhir4.Bundle>(
+    `/Procedure?patient=${patientId}&_count=50`,
+  );
+
+export const getDiagnosticReports = (patientId: string) =>
+  fhirServerFetch<fhir4.Bundle>(
+    `/DiagnosticReport?patient=${patientId}&_count=50`,
+  );
+
+export const getClaims = (patientId: string) =>
+  fhirServerFetch<fhir4.Bundle>(
+    `/Claim?patient=${patientId}&_count=50`,
   );

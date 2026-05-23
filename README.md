@@ -1,4 +1,6 @@
-# SepSofa — Sepsis Early Warning
+# Prior Auth — 
+
+Just like a lawyer would gather all evidence to defend his client in the court of law, so are medical practitioner
 
 Practitioner-facing clinical dashboard that pulls patient data from a FHIR R4 server, computes **qSOFA**, **SIRS**, and **NEWS2** scores in real time, and ranks patients by risk tier so the most critical case is always on top.
 

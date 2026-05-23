@@ -29,16 +29,9 @@ export function patientsFromBundle(bundle: fhir4.Bundle | undefined): fhir4.Pati
     .filter((r): r is fhir4.Patient => r?.resourceType === 'Patient');
 }
 
-export function conditionsFromBundle(bundle: fhir4.Bundle | undefined): fhir4.Condition[] {
+export function entriesFromBundle(bundle: fhir4.Bundle | undefined): fhir4.Resource[] {
   if (!bundle?.entry) return [];
   return bundle.entry
     .map((e) => e.resource)
-    .filter((r): r is fhir4.Condition => r?.resourceType === 'Condition');
-}
-
-export function medicationsFromBundle(bundle: fhir4.Bundle | undefined): fhir4.MedicationRequest[] {
-  if (!bundle?.entry) return [];
-  return bundle.entry
-    .map((e) => e.resource)
-    .filter((r): r is fhir4.MedicationRequest => r?.resourceType === 'MedicationRequest');
+    .filter((r): r is NonNullable<typeof r> => !!r) as fhir4.Resource[];
 }

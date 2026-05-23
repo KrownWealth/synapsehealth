@@ -10,7 +10,6 @@ async function clientFetch<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       Accept: 'application/fhir+json',
-      'Content-Type': 'application/fhir+json',
       ...init?.headers,
     },
   });
@@ -24,25 +23,44 @@ export const fetchPatients = (page = 0, count = 20) =>
 export const fetchPatient = (id: string) =>
   clientFetch<fhir4.Patient>(`/Patient/${id}`);
 
-export const postPatient = (resource: fhir4.Patient) =>
-  clientFetch<fhir4.Patient>('/Patient', { method: 'POST', body: JSON.stringify(resource) });
-
-export const putPatient = (id: string, resource: fhir4.Patient) =>
-  clientFetch<fhir4.Patient>(`/Patient/${id}`, { method: 'PUT', body: JSON.stringify(resource) });
-
 export const searchPatientsByNameClient = (name: string) =>
   clientFetch<fhir4.Bundle>(`/Patient?name=${encodeURIComponent(name)}&_count=50`);
 
-export const fetchVitals = (patientId: string) =>
-  clientFetch<fhir4.Bundle>(`/Observation?patient=${patientId}&category=vital-signs&_sort=-date&_count=20`);
-
-export const fetchVitalsTrend = (patientId: string) => {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  return clientFetch<fhir4.Bundle>(`/Observation?patient=${patientId}&category=vital-signs&date=ge${since}&_sort=date&_count=100`);
+export const fetchActiveMedicationsAcrossPatients = (patientIds: string[]) => {
+  if (patientIds.length === 0) return Promise.resolve({ resourceType: 'Bundle', type: 'searchset', entry: [] } as fhir4.Bundle);
+  const orList = patientIds.map((id) => `Patient/${id}`).join(',');
+  return clientFetch<fhir4.Bundle>(`/MedicationRequest?status=active&patient=${encodeURIComponent(orList)}&_count=200`);
 };
 
+export const fetchAllPreAuthClaimsForPatients = (patientIds: string[]) => {
+  if (patientIds.length === 0) return Promise.resolve({ resourceType: 'Bundle', type: 'searchset', entry: [] } as fhir4.Bundle);
+  const orList = patientIds.map((id) => `Patient/${id}`).join(',');
+  return clientFetch<fhir4.Bundle>(`/Claim?use=preauthorization&patient=${encodeURIComponent(orList)}&_count=200`);
+};
+
+export const fetchObservations = (patientId: string) =>
+  clientFetch<fhir4.Bundle>(`/Observation?patient=${patientId}&_count=50`);
+
 export const fetchConditions = (patientId: string) =>
-  clientFetch<fhir4.Bundle>(`/Condition?patient=${patientId}&clinical-status=active&_sort=-recorded-date`);
+  clientFetch<fhir4.Bundle>(`/Condition?patient=${patientId}&_count=50`);
 
 export const fetchMedications = (patientId: string) =>
-  clientFetch<fhir4.Bundle>(`/MedicationRequest?patient=${patientId}&status=active&_sort=-authoredon`);
+  clientFetch<fhir4.Bundle>(`/MedicationRequest?patient=${patientId}&_count=50`);
+
+export const fetchAllergies = (patientId: string) =>
+  clientFetch<fhir4.Bundle>(`/AllergyIntolerance?patient=${patientId}&_count=50`);
+
+export const fetchImmunizations = (patientId: string) =>
+  clientFetch<fhir4.Bundle>(`/Immunization?patient=${patientId}&_count=50`);
+
+export const fetchEncounters = (patientId: string) =>
+  clientFetch<fhir4.Bundle>(`/Encounter?patient=${patientId}&_count=50`);
+
+export const fetchProcedures = (patientId: string) =>
+  clientFetch<fhir4.Bundle>(`/Procedure?patient=${patientId}&_count=50`);
+
+export const fetchDiagnosticReports = (patientId: string) =>
+  clientFetch<fhir4.Bundle>(`/DiagnosticReport?patient=${patientId}&_count=50`);
+
+export const fetchClaims = (patientId: string) =>
+  clientFetch<fhir4.Bundle>(`/Claim?patient=${patientId}&_count=50`);

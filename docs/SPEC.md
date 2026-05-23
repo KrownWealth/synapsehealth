@@ -1,10 +1,11 @@
-# SPEC.md — SepSofa
-## Sepsis Early Warning & Patient Intelligence Platform
+# SPEC.md — Prior Authorization Accelerator
 
-> **Version:** 1.0  
-> **Challenge:** Practitioner-Facing FHIR App  
-> **Timeline:** 2 weeks  
+> **Version:** 3.1
+> **Challenge:** Practitioner-Facing FHIR App
+> **Timeline:** 2 weeks
 > **Judging Criteria Addressed:** Basic requirements · FHIR performance · Deployment · Visual design · Business use-case
+
+**v3.1 changes:** submission shape moved to the Da Vinci PAS standard (`Claim` with `use: "preauthorization"`) — was `Communication` in v3.0. Auto-creates a self-pay `Coverage` (`type: pay`) on first submission when none exists. ClaimResponse is out of scope (no payer simulation).
 
 ---
 
@@ -12,93 +13,125 @@
 
 ### The Problem
 
-Sepsis kills **270,000 Americans every year** and costs the US healthcare system **$24 billion annually** — making it the single most expensive condition treated in US hospitals. It is also one of the most time-sensitive: every hour of delayed treatment increases mortality by **7%**.
+Prior authorization is the **#1 administrative burden in US healthcare**. The American Medical Association puts the total cost at **$13B per year** in physician practice time alone, and CAQH's annual industry index puts the broader administrative burden in the tens of billions on top of that. Independent of cost, **prior auth delays care by days or weeks**: AMA's 2024 survey found 94% of physicians report care delays caused by PA, and 24% report that PA has led to a serious adverse event for a patient in their care.
 
-The clinical challenge is not detection — the criteria for sepsis are well-established and measurable. The challenge is **workflow**. Practitioners managing a ward of 20–30 patients review charts sequentially, often hours apart. By the time a nurse flags deteriorating vitals and a doctor reviews the chart, the sepsis cascade has already advanced.
+The mechanics are mundane and brutal. A doctor orders a high-cost drug, an advanced imaging study, or a specialist procedure. The payer requires pre-approval before they'll pay. To get that approval the doctor — or, more commonly, a clinical staff member — has to assemble a packet:
 
-Existing EHR systems display vitals as raw numbers in isolated chart views. No system aggregates them into a live risk score, ranks patients by urgency, or gives the practitioner a single page that explains *why* a patient is at risk right now.
+- The qualifying diagnosis with its ICD-10 code
+- Coverage details and member ID
+- Supporting lab results, prior failed treatments, and clinical notes
+- A written narrative tying the evidence to the payer's medical-necessity criteria
+- A payer-specific form filled out by hand
+
+The information is already in the chart as structured FHIR data. The form is mechanical. The narrative writes itself from the data. But the workflow spans 4–6 screens in the EHR, takes **~45 minutes per request** in steady state, and there are tens of thousands of these every day across a large practice.
+
+### Why now
+
+The CMS **Interoperability and Prior Authorization rule** (CMS-0057-F, effective in stages through 2026–2027) requires payers to expose PA decisions and statuses via FHIR APIs and to respond within 72 hours for urgent / 7 days for standard requests. Even before those APIs are fully online, every modern EHR already exposes the source-side clinical data via FHIR R4. The bottleneck has always been the manual assembly step, not the data.
 
 ### The Solution
 
-**SepSofa** is a practitioner-facing clinical dashboard that:
+**Prior Authorization Accelerator** is a practitioner-facing app organized as a **cross-patient admin dashboard**. The doctor opens the app and sees, at a glance:
 
-1. Pulls patient vitals from a FHIR server in real time
-2. Computes three evidence-based sepsis risk scores simultaneously: **qSOFA**, **SIRS**, and **NEWS2**
-3. Ranks all patients by risk tier so the most critical patient is always at the top of the list
-4. Shows a full clinical picture — vitals trends, active conditions (infection source), active medications (antibiotics running?) — on a single patient detail page
+1. A **worklist** of every active prescription across their panel that hasn't been PA-submitted yet, sorted by urgency
+2. KPI tiles showing how many are outstanding, how many are overdue, how many have been submitted, and how many patients are on the panel
+3. The patient list, still accessible as a sub-section of the dashboard
 
-### Why This Wins the Business-Case Criterion
+Clicking any worklist row navigates into the patient's chart, where the doctor can:
 
-- The problem is real, quantified, and widely recognised (NHS, CMS, AHRQ all publish sepsis reduction mandates)
-- The solution is entirely achievable with FHIR R4 `Observation`, `Patient`, `Condition`, and `MedicationRequest` resources — no proprietary data required
-- The scoring algorithms (qSOFA, SIRS, NEWS2) are published, validated, and used in production hospitals globally
-- The feature set maps cleanly to both weeks of the challenge without overreach
+4. Click **Generate PA packet** on the relevant prescription
+5. Review an auto-assembled, citation-grounded justification packet (diagnosis, supporting labs, prior therapy, AI narrative)
+6. Edit if needed; click Approve & Submit
+7. The submission writes a `Claim` (`use: "preauthorization"`, Da Vinci PAS shape) to FHIR, which immediately moves the worklist row to "submitted"
+
+**Target outcome:** the 45-minute manual task collapses to a **2-minute review**. The doctor never has to click through patients one by one to find what needs PA — the dashboard surfaces the worklist directly.
+
+### What the app does NOT do
+
+- It does **not** decide which prescriptions need PA. That is a payer-specific judgment (the payer's CRD endpoint in production). In this demo, every active prescription is a worklist candidate; the doctor decides what actually requires submission. No hardcoded drug catalog.
+- It does **not** submit to a real payer endpoint or receive a `ClaimResponse`. The `Claim` is written to the same FHIR server as the audit-of-record; in production it would POST to the payer's PAS endpoint and the worklist would also display the payer's `ClaimResponse.outcome`.
+
+### Why this wins the business-case criterion
+
+- PA is real, quantified, and the #1 admin burden named by every major US clinical professional body (AMA, MGMA, AAFP, ACP)
+- The CMS interoperability rule provides regulatory tailwind: every payer must move this direction by 2027
+- The solution uses only FHIR R4 resources already exposed by every certified EHR
+- The cross-patient dashboard is the workflow shape practices actually use — a PA inbox, not a per-patient hunt
 
 ---
 
-## 2. Scoring Algorithms
+## 2. Domain Concepts
 
-SepSofa computes three scores from FHIR `Observation` resources. All logic is deterministic and requires no external API calls.
+### 2.1 What the dashboard considers "needing review"
 
-### 2.1 qSOFA (Quick Sequential Organ Failure Assessment)
+Every `MedicationRequest` with `status=active` belonging to a patient on the panel, **for which no Da Vinci PAS `Claim` (`use=preauthorization`) yet exists**. The set is computed dynamically from FHIR data — no static catalog.
 
-| Criterion | Threshold | Points |
+Urgency is derived from `MedicationRequest.authoredOn`:
+
+| Tier | Criterion | Visual |
 |---|---|---|
-| Respiratory rate | ≥ 22 breaths/min | 1 |
-| Altered mentation | GCS < 15 / any confusion | 1 |
-| Systolic blood pressure | ≤ 100 mmHg | 1 |
+| Overdue | ≥ 7 days since `authoredOn`, no PA Claim | Red ⚠ |
+| This week | 2–6 days, no PA Claim | Amber ⦿ |
+| Fresh | 0–1 days, no PA Claim | Slate · |
+| Submitted | A `Claim` (`use=preauthorization`) references the MedicationRequest via `prescription` | Green ✓ (collapsed by default) |
 
-**Score range:** 0–3  
-**Sepsis suspected:** Score ≥ 2  
-**Clinical weight:** Primary trigger. Score ≥ 2 means immediate escalation regardless of other scores.
+### 2.2 The justification packet
 
-### 2.2 SIRS (Systemic Inflammatory Response Syndrome)
+When the doctor clicks **Generate PA packet** on an active prescription, the app:
 
-| Criterion | Threshold | Points |
-|---|---|---|
-| Temperature | > 38.0°C or < 36.0°C | 1 |
-| Heart rate | > 90 bpm | 1 |
-| Respiratory rate | > 20 breaths/min | 1 |
+1. Runs the **evidence aggregator** — server-side, in parallel via `Promise.all`:
+   - `Condition` (active diagnoses, ICD-10 codes — likely indication for the drug)
+   - `Observation` (recent labs)
+   - Past `MedicationRequest` with status `stopped`/`completed` (prior failed therapy)
+   - Recent `DocumentReference` (consult notes for narrative grounding)
+   - `Coverage` (payer name — "who do we submit to?")
+2. Hands the structured evidence bundle to an LLM (Gemini) with a strict output schema:
+   - `diagnosisRationale`, `supportingEvidence`, `priorTherapyRationale`, `narrative`, `citations[]`, `missingEvidence[]`
+   - Every claim in `narrative` must reference an entry in `citations[]` pointing to a real FHIR `resourceType/id`
+3. Validates the LLM response against a Zod schema before showing it to the doctor
+4. Renders the packet for review
 
-> Note: Full SIRS includes WBC count. SepSofa uses the three criteria consistently available in FHIR vital sign observations. This is clearly labelled in the UI as "3-parameter SIRS".
+**The LLM never queries FHIR.** The aggregator runs first in deterministic code; the LLM is a writer that only sees the evidence the aggregator hands it. This is the primary hallucination control.
 
-**Score range:** 0–3  
-**SIRS met:** Score ≥ 2  
-**Clinical weight:** Sensitive early indicator. Fires before qSOFA in many cases.
+### 2.3 Submission — Da Vinci PAS `Claim`
 
-### 2.3 NEWS2 (National Early Warning Score 2)
+On Approve & Submit, the app constructs a `Claim` resource per the **Da Vinci Prior Authorization Support** (PAS) implementation guide and POSTs it to FHIR. This is the same resource shape a real payer endpoint would accept; the only thing we omit is the payer's response (`ClaimResponse`), which is out of scope for this demo.
 
-| Parameter | FHIR LOINC | 3 pts | 2 pts | 1 pt | 0 pts | 1 pt | 2 pts | 3 pts |
-|---|---|---|---|---|---|---|---|---|
-| Respiratory rate | 9279-1 | ≤8 | — | 9–11 | 12–20 | — | 21–24 | ≥25 |
-| SpO₂ (scale 1) | 59408-5 | ≤91 | 92–93 | 94–95 | ≥96 | — | — | — |
-| Supplemental O₂ | — | — | 2 pts if yes | — | 0 if no | — | — | — |
-| Systolic BP | 8480-6 | ≤90 | 91–100 | 101–110 | 111–219 | — | — | ≥220 |
-| Heart rate | 8867-4 | ≤40 | — | 41–50 | 51–90 | 91–110 | 111–130 | ≥131 |
-| Consciousness | — | — | — | — | Alert | — | — | Any other |
-| Temperature | 8310-5 | ≤35.0 | — | 35.1–36.0 | 36.1–38.0 | 38.1–39.0 | ≥39.1 | — |
+```ts
+{
+  resourceType: 'Claim',
+  status: 'active',
+  use: 'preauthorization',
+  type: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/claim-type',
+                     code: 'pharmacy' }] },
+  patient: { reference: 'Patient/{id}' },
+  created: <ISO timestamp>,
+  provider: <MedicationRequest.requester>,        // real Practitioner reference
+  priority: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/processpriority',
+                         code: 'normal' }] },
+  insurance: [{ sequence: 1, focal: true,
+                coverage: { reference: 'Coverage/{id}' } }],
+  prescription: { reference: 'MedicationRequest/{id}' },
+  item: [{
+    sequence: 1,
+    productOrService: { coding: [<RxNorm coding lifted from medicationCodeableConcept>] },
+  }],
+  supportingInfo: [
+    { sequence: 1,
+      category: { coding: [{ system: '…/claiminformationcategory', code: 'clinical' }] },
+      valueString: <edited narrative> },
+    // each grounded citation:
+    { sequence: 2,
+      category: { coding: [{ system: '…/claiminformationcategory', code: 'info' }] },
+      valueReference: { reference: 'Condition/{id}', display: <citation detail> } },
+    // …
+  ],
+}
+```
 
-**Score range:** 0–20  
-**Risk thresholds:**
+The `Claim` is both the **audit record** and the **workflow state**: the dashboard cross-references `Claim.prescription` to mark the corresponding MedicationRequest as "submitted," removing it from the active worklist.
 
-| Score | Risk level | Response |
-|---|---|---|
-| 0 | Low | Routine monitoring |
-| 1–4 | Low | Minimum 12-hourly monitoring |
-| 5–6 | Medium | Urgent review by ward doctor |
-| ≥7 | High | Emergency response team |
-| Any single parameter = 3 | Medium minimum | Urgent review |
-
-### 2.4 Composite Risk Tier
-
-SepSofa combines all three scores into a single risk tier displayed as a badge on the patient list:
-
-| Tier | Colour | Condition |
-|---|---|---|
-| **Critical** | Red | qSOFA ≥ 2 AND NEWS2 ≥ 7 |
-| **High** | Orange | qSOFA ≥ 2 OR (NEWS2 ≥ 7 without qSOFA) |
-| **Medium** | Amber | SIRS ≥ 2 OR NEWS2 5–6 OR any single NEWS2 parameter = 3 |
-| **Low** | Green | All scores below thresholds |
+**Coverage handling.** Da Vinci PAS requires `Claim.insurance` to reference an active `Coverage`. The Synthea demo cohort has no Coverage on file. The submit route uses an `ensureCoverage(patientId)` helper that returns an existing active Coverage if present; if none exists it creates a minimal `Coverage` (`status: active`, `type: pay` — the HL7 v3-ActCode for self-pay, `beneficiary` pointing at the Patient, `payor: [{ display: 'Self-pay' }]`) and references that. This honors the standard's cardinality without fabricating insurer data we don't have.
 
 ---
 
@@ -106,7 +139,7 @@ SepSofa combines all three scores into a single risk tier displayed as a badge o
 
 All data is sourced from FHIR R4. No external APIs are required for core functionality.
 
-### 3.1 Patient (`/Patient`)
+### 3.1 Patient
 
 | UI Field | FHIR Path |
 |---|---|
@@ -114,238 +147,185 @@ All data is sourced from FHIR R4. No external APIs are required for core functio
 | Gender | `gender` |
 | Date of birth | `birthDate` |
 | Age (computed) | Derived from `birthDate` |
+| Identifiers | `identifier[]` (MRN, member ID, etc.) |
+| Address | `address[0]` |
+| Contact | `telecom[]` |
+| Marital status | `maritalStatus` |
+| Languages | `communication[]` |
 
-### 3.2 Vital Signs (`/Observation?category=vital-signs`)
+### 3.2 MedicationRequest
 
-| Parameter | LOINC Code | Unit |
-|---|---|---|
-| Heart rate | 8867-4 | beats/min |
-| Respiratory rate | 9279-1 | breaths/min |
-| Systolic blood pressure | 8480-6 | mmHg |
-| Diastolic blood pressure | 8462-4 | mmHg |
-| Body temperature | 8310-5 | °C or °F |
-| Oxygen saturation | 59408-5 | % |
-| Body weight | 29463-7 | kg or lb |
-| Body height | 8302-2 | cm or in |
-| BMI | 39156-5 | kg/m² |
+`GET /MedicationRequest?status=active&patient={comma-separated-OR-list}&_count=200`
 
-### 3.3 Conditions (`/Condition?clinical-status=active`)
+| UI Field | FHIR Path |
+|---|---|
+| Medication name | `medicationCodeableConcept.text` or `coding[0].display` |
+| RxNorm code | `medicationCodeableConcept.coding[?system contains 'rxnorm'].code` |
+| Dosage | `dosageInstruction[0].text` |
+| Authored date | `authoredOn` |
+| Status | `status` |
+| Subject | `subject.reference` (links to Patient on the worklist) |
+
+The dashboard issues a single comma-OR query across all panel patient IDs to get all their active meds in one bundle.
+
+### 3.3 Claim (`use=preauthorization`)
+
+`GET /Claim?use=preauthorization&patient={comma-separated-OR-list}&_count=200`
+
+The Da Vinci PAS submission record. Used to identify which MedicationRequests have already been PA-submitted. The dashboard parses `Claim.prescription.reference` client-side and matches against the worklist's MedicationRequest IDs.
+
+| UI use | FHIR path |
+|---|---|
+| MedicationRequest being authorized | `Claim.prescription.reference` |
+| Submission timestamp | `Claim.created` |
+| Drug being authorized | `Claim.item[0].productOrService.coding[?system contains 'rxnorm'].code` |
+| Provider of record | `Claim.provider.reference` (lifted from MedicationRequest.requester) |
+| Payer of record | `Claim.insurance[0].coverage.reference` → `Coverage.payor[0].display` |
+| Narrative for audit | `Claim.supportingInfo[?category code='clinical'].valueString` |
+| Grounded citations | `Claim.supportingInfo[?category code='info'].valueReference` |
+
+The `use=preauthorization` filter is essential — Synthea seeds a large number of billing `Claim`s (mean ~38/patient on the demo cohort) that have nothing to do with PA. The use parameter narrows the panel-wide query to just the PAS submissions.
+
+### 3.4 Condition
+
+`GET /Condition?patient=:id`
 
 | UI Field | FHIR Path |
 |---|---|
 | Condition name | `code.text` or `code.coding[0].display` |
+| ICD-10 code | `code.coding[?system contains 'icd-10'].code` |
 | Onset date | `onsetDateTime` |
 | Clinical status | `clinicalStatus.coding[0].code` |
-| Category | `category[0].coding[0].code` |
 
-### 3.4 Medications (`/MedicationRequest?status=active`)
+### 3.5 Observation
+
+`GET /Observation?patient=:id`
 
 | UI Field | FHIR Path |
 |---|---|
-| Medication name | `medicationCodeableConcept.text` |
-| Dosage | `dosageInstruction[0].text` |
-| Prescribed date | `authoredOn` |
-| Prescriber | `requester.display` |
+| Test name | `code.text` or `code.coding[0].display` |
+| LOINC code | `code.coding[?system contains 'loinc'].code` |
+| Value | `valueQuantity.value` + `valueQuantity.unit`, or `valueString`, or `component[]` |
+| Recorded | `effectiveDateTime` |
+
+### 3.6 DocumentReference
+
+`GET /DocumentReference?patient=:id`
+
+| UI Field | FHIR Path |
+|---|---|
+| Document type | `type.text` |
+| Created | `date` |
+| Author | `author[0].display` |
+| Attachment | `content[0].attachment.url` or `data` |
+
+Used as supporting evidence for the narrative — the doctor's most recent consult note for the relevant condition.
+
+### 3.7 Other patient-history resources
+
+The patient detail page also surfaces `Procedure`, `AllergyIntolerance`, `Immunization`, `Encounter`, `DiagnosticReport`, and `Claim` in collapsible sections — each entry expandable to its raw FHIR JSON. These aren't load-bearing for the PA workflow but provide chart context.
+
+### 3.8 Coverage
+
+`GET /Coverage?patient=:id`
+
+Shown inline in the justification modal as "Payer: {name} · {status}". The Synthea data on the demo tenant carries only `status` and `payor[0].display` (it's lifted from `EOB.contained.Coverage` which is intentionally minimal); a real EHR's Coverage resources would carry the full §3 field set (member ID, group, plan, effective period, primary marker) and the modal would surface them automatically.
 
 ---
 
-## 4. Week 1 — Patient Management
+## 4. Page Structure
 
-### 4.1 Patient List Page (Home)
+### 4.1 Dashboard (`/`)
 
-**Route:** `/`
+The home page. Four blocks, top to bottom:
+
+```
+┌─ Page header ────────────────────────────────────────────────────┐
+│ Prior Authorization Dashboard                                     │
+│ Cross-patient view of prescriptions awaiting prior-auth review.  │
+└───────────────────────────────────────────────────────────────────┘
+
+┌─ KPI tiles ──────────────────────────────────────────────────────┐
+│ [Needs review N]  [Overdue N]  [Submitted N]  [Patients N]       │
+└───────────────────────────────────────────────────────────────────┘
+
+┌─ Prior Auth — needs review (N) ──────────────────────────────────┐
+│ ⚠  Margaret T. Liu     Oxycontin 10mg ER       14 days ago        │
+│ ⦿  Carlos Martinez     Fentanyl 25mcg patch     4 days ago        │
+│ ·  John Smith          Lisinopril 10mg          1 day ago         │
+│ ...                                                                │
+│                                              [ Show submitted ]    │
+└───────────────────────────────────────────────────────────────────┘
+
+┌─ Patient panel ──────────────────────────────────────────────────┐
+│ [Search bar]                                                       │
+│ Patient cards (existing list, searchable + paginated)              │
+└───────────────────────────────────────────────────────────────────┘
+```
 
 #### Requirements
 
-- [ ] Display all patients from the FHIR server
-- [ ] Show per patient: full name, gender, date of birth, calculated age
-- [ ] Show per patient: composite risk tier badge (Critical / High / Medium / Low)
-- [ ] Show per patient: qSOFA score as a number badge
-- [ ] Show per patient: NEWS2 score as a number badge
-- [ ] Default sort: risk tier descending (Critical first), then NEWS2 score descending
-- [ ] Secondary sort toggle: alphabetical by last name
-- [ ] Search: filter patients by name (first or last) in real time, client-side
-- [ ] Pagination or infinite scroll for large patient lists (page size: 20)
-- [ ] Loading skeleton cards while FHIR data is fetching
-- [ ] Empty state if no patients found
-- [ ] Error state if FHIR server is unreachable
+- [ ] Server-prefetched: first paint includes worklist rows + KPI numbers + patient cards
+- [ ] Worklist row → click → navigates to that patient's detail page (Phase 3+ may upgrade this to open the PA modal directly)
+- [ ] "Show submitted" toggle reveals the green-tagged submitted rows in a collapsed sub-section
+- [ ] Patient panel: search + pagination work independently of the worklist
+- [ ] Empty state ("Inbox zero") when no rows need review
 
-#### Risk Badge Display
+#### Performance
+
+- **Two-stage server prefetch.** Stage 1: fetch the panel's patient bundle. Stage 2: in parallel, fetch active meds across all panel patients AND all submission Communications across all panel patients. Both stage-2 queries use FHIR's comma-OR list syntax to scope to the panel.
+- **TanStack Query keys are derived from the patient ID list**, so navigating away and back doesn't re-fetch.
+
+### 4.2 Patient Detail (`/patients/:id`)
+
+Unchanged from the foundation work. Sticky demographics header + collapsible medical-history sections (Conditions, Observations, Medications, Procedures, Allergies, Immunizations, Encounters, DiagnosticReports, DocumentReferences, Claims). Each entry expandable to raw FHIR JSON.
+
+Phase 3 will add a **Generate PA packet** action on each active `MedicationRequest` row in the Medications section.
+
+---
+
+## 5. The PA Workflow (clicking through to the modal)
+
+### 5.1 Justification Builder Modal
+
+Clicking **Generate PA packet** on any active MedicationRequest opens a modal:
 
 ```
-[● Critical]  red background    — qSOFA ≥2 + NEWS2 ≥7
-[● High    ]  orange background — qSOFA ≥2
-[● Medium  ]  amber background  — SIRS ≥2 or NEWS2 5–6
-[● Low     ]  green background  — all clear
+┌─ Prior Auth — Oxycontin 10mg ER ─────────────────────── × ─┐
+│ ⓘ AI-generated draft. Requires physician review.             │
+│                                                              │
+│ Coverage     │ Anthem · active                                │
+│ Diagnosis    │ Chronic pain — back (M54.5)                   │
+│ Supporting   │ Pain assessment 8/10 (2025-09-12)             │
+│ Prior        │ Ibuprofen 800mg — stopped after 6 wks         │
+│ therapy      │   for inadequate response                      │
+│ Notes        │ Pain mgmt consult 2025-09-15                  │
+│                                                              │
+│ Narrative (AI-generated, editable):                          │
+│ ┌──────────────────────────────────────────────────────────┐ │
+│ │ This 67-year-old patient has chronic low back pain ...   │ │
+│ └──────────────────────────────────────────────────────────┘ │
+│                                                              │
+│ Citations (3):                                                │
+│   Condition/abc123 — Chronic low back pain                   │
+│   Observation/def456 — Pain assessment 8/10                  │
+│   MedicationRequest/ghi789 — Prior ibuprofen trial           │
+│                                                              │
+│ ⚠  Missing evidence:                                          │
+│   · None                                                      │
+│                                                              │
+│        [ Cancel ]  [ Approve & Submit ]                       │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-#### Patient Card Layout
+### 5.2 Submission
 
-```
-┌─────────────────────────────────────────────────────┐
-│  [Avatar]  Margaret T. Liu                [● High]  │
-│            Female · 67 yrs · DOB 1957-03-12         │
-│            qSOFA: 2/3  ·  NEWS2: 6/20               │
-└─────────────────────────────────────────────────────┘
-```
+On Approve & Submit:
 
----
-
-### 4.2 Create Patient
-
-**Route:** `/patients/new`  
-**Trigger:** "Add patient" button on the list page
-
-#### Form Fields & Validation
-
-| Field | Type | Validation |
-|---|---|---|
-| Given name(s) | Text | Required. Min 1 character. Letters, spaces, hyphens only. |
-| Family name | Text | Required. Min 1 character. Letters, spaces, hyphens only. |
-| Gender | Select | Required. Options: `male`, `female`, `other`, `unknown` |
-| Date of birth | Date picker | Required. Cannot be in the future. Cannot be more than 130 years ago. |
-
-**On submit:**
-- Validate all fields before sending
-- `POST /Patient` with correct FHIR R4 Patient resource body
-- Show inline field-level error messages (not toast-only)
-- On success: redirect to the new patient's detail page
-- On FHIR error: show error message with the FHIR OperationOutcome detail
-
----
-
-### 4.3 Edit Patient
-
-**Route:** `/patients/:id/edit`  
-**Trigger:** Edit button on patient detail page or patient card
-
-- Pre-populate form with existing patient data from FHIR
-- Same validation rules as create
-- `PUT /Patient/:id` with full updated resource (not PATCH)
-- Optimistic UI: update local state immediately, revert on error
-- On success: redirect back to patient detail page
-
----
-
-### 4.4 Search
-
-- Search input at the top of the patient list
-- Filter is applied client-side against the already-fetched patient list
-- If total patient count exceeds the fetched page, also trigger a server-side `GET /Patient?name=:query` and merge results
-- Debounce server-side search: 300ms after last keystroke
-- Show "No patients found" with a clear search state if results are empty
-
----
-
-## 5. Week 2 — Patient Detail Page
-
-**Route:** `/patients/:id`  
-**Trigger:** Clicking any patient card on the list
-
-### 5.1 Page Structure
-
-```
-┌── Demographics bar (always visible) ─────────────────┐
-├── Sepsis Risk Panel ────────────────────────────────── ← SepSofa's headline feature
-├── Vital Signs Panel ──────────────────────────────────
-├── Vitals Trend Chart ─────────────────────────────────
-├── Active Conditions ──────────────────────────────────
-└── Active Medications ─────────────────────────────────
-```
-
----
-
-### 5.2 Demographics Bar
-
-Sticky at the top of the page. Always visible while scrolling.
-
-| Field | Source |
-|---|---|
-| Full name | `Patient.name` |
-| Gender | `Patient.gender` |
-| Date of birth | `Patient.birthDate` |
-| Age | Computed from `birthDate` |
-| Risk tier badge | Computed from latest vitals |
-
----
-
-### 5.3 Sepsis Risk Panel
-
-The primary feature of SepSofa. Displayed immediately below the demographics bar.
-
-**Displays:**
-- Composite risk tier with colour-coded banner and recommended action
-- qSOFA score (N/3) with each criterion listed and marked met/unmet
-- SIRS score (N/3) with each criterion listed and marked met/unmet
-- NEWS2 score (N/20) with per-parameter breakdown showing points contributed
-
-**Behaviour:**
-- If any score is in Critical or High tier, the panel renders with a prominent coloured border
-- Each criterion shows the actual value alongside the threshold (e.g. "RR: 24 br/min ≥ 22")
-- Scores are computed from the **most recent** observation for each vital sign parameter
-
----
-
-### 5.4 Vital Signs Panel
-
-Display the latest recorded value for each vital sign in a grid of metric cards.
-
-| Vital | Normal Range | Flag if |
-|---|---|---|
-| Heart rate | 60–100 bpm | < 40 or > 130 |
-| Respiratory rate | 12–20 br/min | < 8 or > 25 |
-| Systolic BP | 100–140 mmHg | < 90 or > 180 |
-| Diastolic BP | 60–90 mmHg | < 50 or > 110 |
-| Temperature | 36.1–38.0 °C | < 35.0 or > 39.1 |
-| SpO₂ | ≥ 96% | < 92 |
-| Weight | — | — |
-| Height | — | — |
-| BMI | 18.5–24.9 | < 16 or > 35 |
-
-**Display rules:**
-- Out-of-range values render the card with a red/amber border and coloured text
-- Normal values render with a green indicator
-- "No data" placeholder if no observation exists for a parameter
-- Show timestamp of when each value was last recorded
-
----
-
-### 5.5 Vitals Trend Chart
-
-A time-series line chart showing the trajectory of key vitals over the last 24 hours (or available history if shorter).
-
-**Chart parameters:**
-- X-axis: time (last 24 hours, 4-hour intervals)
-- Y-axis: value
-- Series: Heart rate, Respiratory rate, Systolic BP (three lines, distinct colours)
-- Overlay: NEWS2 score on a secondary axis (bar chart behind the lines)
-
-**Behaviour:**
-- Horizontal threshold lines for key clinical cut-offs (e.g. RR = 22, SBP = 100)
-- Tooltip on hover showing exact value, timestamp, and NEWS2 contribution for that reading
-- "Insufficient data" placeholder if fewer than 2 observations exist
-
----
-
-### 5.6 Active Conditions
-
-- Fetch from `GET /Condition?patient=:id&clinical-status=active`
-- Display as a list: condition name, onset date, category (problem-list-item / encounter-diagnosis / etc.)
-- Group by category if more than 5 conditions
-- Conditions relevant to sepsis (infections, immunocompromised states) highlighted with an amber left border
-- "No active conditions on record" empty state
-
-**Infection flag logic:**  
-If any active condition's `code.coding` or `code.text` contains keywords associated with infection (pneumonia, UTI, cellulitis, bacteremia, sepsis, abscess, wound infection), display a "Possible infection source" banner above the conditions list. This contextualises the sepsis risk score.
-
----
-
-### 5.7 Active Medications
-
-- Fetch from `GET /MedicationRequest?patient=:id&status=active`
-- Display as a list: medication name, dosage instruction, date prescribed
-- Flag antibiotic medications with a teal badge ("Antibiotic") — if an antibiotic is already active, note this in the sepsis risk panel ("Antibiotic therapy in progress")
-- "No active medications on record" empty state
+1. POST `Claim` (`use=preauthorization`, Da Vinci PAS shape — see §2.3) to FHIR. If the patient has no active `Coverage`, the submit route first POSTs a minimal self-pay Coverage via `ensureCoverage()` so the Claim's required `insurance.coverage` reference resolves.
+2. Show confirmation: "Submitted as Claim/{id}"
+3. Invalidate the `['preauth-claims-for', ...]` queries so the dashboard refreshes
+4. The worklist row moves from "Needs review" to the (collapsed) Submitted section
 
 ---
 
@@ -353,41 +333,43 @@ If any active condition's `code.coding` or `code.text` contains keywords associa
 
 ### 6.1 Design Principles
 
-- **Urgency hierarchy:** The most critical information (risk tier) must be visible without scrolling on any page
-- **Speed:** The app must feel instantaneous. Skeletons during load, no empty white screens
-- **Density:** Medical professionals process dense information. Cards can be compact — readable but not padded for consumer audiences
-- **Colour semantics:** Red = critical/danger, Amber = warning, Green = normal. Never invert these.
+- **Workflow density.** PA staff process dozens of these per day. Cards are compact, dense, readable but not padded for consumer audiences.
+- **Inbox-first surfacing.** The worklist is the home page. The doctor doesn't hunt for PA candidates patient-by-patient.
+- **Gap-first surfacing in the modal.** Missing evidence is the action item; show it prominently before the narrative.
+- **Reversibility.** Every AI-generated piece is editable. The Approve & Submit click is the only commitment.
+- **Audit visibility.** Every submission produces a FHIR resource the user can navigate to.
+- **Color semantics.** Red = denied / missing required evidence / overdue, Amber = warning / gap / this week, Green = approved / criteria met / submitted, Slate = neutral / fresh. Never invert.
 
-### 6.2 Colour System
+### 6.2 Color System
 
-| Token | Usage |
-|---|---|
-| `--risk-critical` | `#A32D2D` bg `#FCEBEB` | qSOFA ≥2 + NEWS2 ≥7 |
-| `--risk-high` | `#993C1D` bg `#FAECE7` | qSOFA ≥2 |
-| `--risk-medium` | `#854F0B` bg `#FAEEDA` | SIRS ≥2 or NEWS2 5–6 |
-| `--risk-low` | `#3B6D11` bg `#EAF3DE` | All clear |
-| `--fhir-tag` | `#185FA5` bg `#E6F1FB` | FHIR/data source labels |
+| Token | Hex | Usage |
+|---|---|---|
+| `--status-approved` | `#3B6D11` bg `#EAF3DE` | Submitted, criteria met |
+| `--status-pending` | `#854F0B` bg `#FAEEDA` | This-week worklist, criteria gap |
+| `--status-denied` | `#A32D2D` bg `#FCEBEB` | Overdue, missing required evidence |
+| `--status-info` | `#185FA5` bg `#E6F1FB` | Informational, FHIR resource labels |
 
 ### 6.3 Responsive Layout
 
-- Desktop (≥1024px): sidebar navigation + main content area
-- Tablet (768–1023px): top navigation + full-width content
-- Mobile (< 768px): bottom tab bar + stacked content
-- The patient list must be usable on a tablet held in portrait orientation (a common clinical device form factor)
+- Desktop (≥1024px): max-width content area, KPI tiles in a 4-column row
+- Tablet (768–1023px): KPI tiles in a 2-column grid
+- Mobile (<768px): KPI tiles stacked
+- The justification modal scrolls within itself on small screens
 
 ### 6.4 Accessibility
 
 - All interactive elements keyboard-navigable
-- Risk badges use both colour AND text label (not colour alone)
-- Out-of-range vitals flagged with icon AND colour
-- ARIA labels on all icon-only buttons
-- Minimum contrast ratio: 4.5:1 for normal text, 3:1 for large text
+- Urgency markers use icon AND text label (not color alone) — `⚠` + "overdue", `⦿` + "this week", etc.
+- ARIA labels on icon-only markers
+- The "AI-generated draft, requires physician review" banner is non-dismissible
+- Minimum contrast ratio: 4.5:1 normal text, 3:1 large text
 
 ### 6.5 Loading States
 
-- Patient list: skeleton cards (same shape as real cards)
-- Patient detail: skeleton for each panel independently — vitals can load while conditions are still fetching
-- Error states: clear message + retry button per failed section (not a full-page error)
+- Dashboard: skeleton tiles + skeleton worklist while the parallel prefetch resolves
+- Patient detail: each medical-history section loads independently
+- Justification modal: skeleton with progress message ("Gathering FHIR evidence and drafting justification…")
+- Errors are per-section, not full-page
 
 ---
 
@@ -397,59 +379,61 @@ If any active condition's `code.coding` or `code.text` contains keywords associa
 
 | Requirement | Implementation |
 |---|---|
-| Server-side proxy | All FHIR calls flow `browser → Next.js Route Handler → FHIR`. The FHIR URL and any credentials are server-only and never reach the browser. The proxy enforces a resource-path allowlist (`Patient`, `Observation`, `Condition`, `MedicationRequest`) and logs every access. |
-| Parallel fetching | Fetch `Patient`, `Observation`, `Condition`, `MedicationRequest` concurrently — never sequentially. On the patient detail page this runs as a server-side `Promise.all` of `prefetchQuery` calls, then hydrates into the client cache. |
-| Caching | TanStack Query caches responses for 60 seconds with stale-while-revalidate on revisit |
-| Patient list | Use `_count=50` on initial list fetch. Fetch full resources on demand. The first page is server-prefetched so first paint shows real patient cards, not skeletons. |
-| Vitals | Request `_sort=-date&_count=20` to get the 20 most recent observations per patient |
-| Bundle processing | Use `GET /Patient/:id/$everything` sparingly — prefer targeted resource queries |
+| Server-side proxy | All FHIR calls flow `browser → Next.js Route Handler → FHIR`. FHIR URL + tokens are server-only and never reach the browser. The proxy enforces a resource-path allowlist. |
+| Parallel fetching | Dashboard does a two-stage prefetch: patients (Stage 1), then active-meds-across + preauth-claims-for in parallel (Stage 2). Patient detail prefetches all clinical resources via `Promise.all`. The justification builder gathers its evidence bundle in parallel. |
+| Cross-patient queries | One bundle per resource type, scoped via comma-OR'd patient IDs (`?patient=Patient/A,Patient/B,…`) — avoids N+1. |
+| Caching | TanStack Query caches responses for 60s with stale-while-revalidate. |
+| First paint | Server-prefetched + dehydrated state means first paint shows real worklist rows and KPI numbers, not skeletons. |
 
 ### 7.2 Target Metrics
 
 | Metric | Target |
 |---|---|
-| Time to interactive (patient list) | < 1.5 seconds on 4G |
-| Patient detail page load | < 2 seconds after navigation |
-| Score computation | < 10ms (synchronous, no async) |
+| Time to interactive (dashboard) | < 2s on 4G |
+| Patient detail page load | < 2s after navigation |
+| Justification builder fully loaded | < 8s after click (FHIR fetch + LLM round-trip) |
 | Search debounce | 300ms |
 
 ### 7.3 Error Handling
 
-- FHIR server timeout: 10 seconds, then show error state with retry
-- Partial data: if SpO₂ is missing, compute scores from available vitals and note "SpO₂ not recorded — NEWS2 partial"
-- Rate limiting: exponential backoff starting at 500ms, max 3 retries
+- FHIR server timeout: 10s, then error state with retry per section
+- Partial data: if `DocumentReference` is unavailable, the justification builder still works with what it has and notes the gap
+- LLM provider error: surface the upstream message to the modal and offer a retry button
 
 ---
 
 ## 8. Deployment Requirements
 
-- Application must be deployed to a publicly accessible URL before submission
-- Recommended platforms: **Vercel**, **Netlify**, or **Render** (all have free tiers)
-- FHIR server: use the public **HAPI FHIR R4** test server (`https://hapi.fhir.org/baseR4`) for the demo
-- Environment variable for FHIR base URL so judges can point it at their own server: `FHIR_BASE_URL` — **server-only** (no `NEXT_PUBLIC_` prefix). The FHIR URL is never exposed to the browser; all browser traffic goes through the same-origin BFF at `/api/fhir/*`.
-- Optional `FHIR_AUTH_TOKEN` server env var — if set, the BFF forwards it as `Authorization: Bearer <token>` to the FHIR server. Unused for the public HAPI demo build, wired up for any real FHIR server.
-- No FHIR-server authentication required for the demo build itself (HAPI is open).
-- README must include the live URL, how to run locally, and the FHIR server being used
+- Application deployed to a publicly accessible URL before submission (Vercel, Netlify, or Render)
+- FHIR server: configurable to any FHIR R4 server via `FHIR_BASE_URL`. Current demo points at the Medblocks tenant.
+- `FHIR_BASE_URL` — **server-only** (no `NEXT_PUBLIC_` prefix). The FHIR URL never reaches the browser.
+- `FHIR_SERVER_TOKEN` — optional server-only env var; forwarded as `Authorization: Bearer <token>` when set. Required for tenanted servers.
+- `GEMINI_API_KEY` — server-only, used by the justification builder.
+- README must include the live URL, how to run locally, env-var list, and the FHIR server in use.
 
 ---
 
 ## 9. Out of Scope (Do Not Build)
 
-- Authentication / login (not required by the challenge)
-- Write-back of scores to FHIR (scores are computed client-side only)
-- WBC / lactate (lab values — not reliably in vital-sign observations on test servers)
-- Push notifications or real-time websocket updates (polling on page focus is sufficient)
-- Multi-tenant / multi-ward views
-- PDF export
+- A static "rule catalog" of drugs/procedures that require PA. PA-required determination is payer-specific. The doctor decides what to PA from the worklist; the app's value is assembly, not gatekeeping.
+- A real payer endpoint that returns `ClaimResponse`. We follow the Da Vinci PAS request shape but write the `Claim` to the same FHIR server as the audit-of-record; in production it would POST to the payer's `$submit` endpoint and surface `ClaimResponse.outcome` on the worklist. No CRD/DTR integration.
+- Multi-payer rule normalization.
+- Patient-facing notifications or PA status push.
+- Authentication / login (not required by the challenge; production would use SMART on FHIR EHR launch).
+- e-Prescribing network integration (Surescripts, RxConnect).
+- Real-time websocket updates (polling on window focus is sufficient).
+- PDF export of the justification packet.
+- Appeal workflow for denied requests.
+- `CoverageEligibilityRequest` (no payer endpoint to call against; would require a real CRD-compatible payer).
 
 ---
 
 ## 10. Judging Criteria Alignment
 
-| Criterion | How SepSofa addresses it |
+| Criterion | How the app addresses it |
 |---|---|
-| **Basic requirements** | Full CRUD on Patient (list, create, edit, search). Full Week 2 detail page with demographics, vitals, conditions, medications. |
-| **Performant FHIR APIs** | Parallel resource fetching, response caching, `_sort` and `_count` query parameters, targeted queries over broad bundle fetches. |
-| **Deployed & accessible** | Vercel/Netlify deploy with public URL, environment variable for FHIR base URL, seeded test data documented in README. |
-| **Visual design + UI/UX** | Risk-sorted patient list with colour-coded tiers, sticky demographics bar, independent panel loading, clear out-of-range flagging, responsive layout. |
-| **Business use-case** | Sepsis kills 270K Americans/year and costs $24B. Every hour of delay increases mortality 7%. SepSofa surfaces risk automatically so practitioners stop missing the window. |
+| **Basic requirements** | Cross-patient dashboard with KPI tiles + PA worklist. Patient list + detail with full FHIR-driven medical history. Workflow-side feature: detect outstanding PA work (via the active-meds × PA-Claim cross-reference), assemble the justification packet on click, submit via FHIR write-back as a Da Vinci PAS `Claim`. |
+| **Performant FHIR APIs** | Cross-patient queries via comma-OR list (single bundle for all panel meds; single bundle for all panel PA Claims) — avoids N+1. Two-stage server prefetch (patients → then meds+PA-claims in parallel). Per-patient detail prefetches all clinical resources via `Promise.all`. Caching via TanStack Query. Resource-path allowlist at the BFF. |
+| **Deployed & accessible** | Vercel/Netlify deploy with public URL, env-var-driven FHIR endpoint and LLM key. Demo data: 10 Synthea-generated patients pre-loaded on the Medblocks tenant. |
+| **Visual design + UI/UX** | Inbox-first dashboard layout. Status-coded urgency (overdue red / this-week amber / fresh slate / submitted green). KPI tiles for quick status read. Collapsible medical-history sections with raw-JSON inspection for transparency. Sticky demographics bar on detail. Independent section loading. Responsive layout. |
+| **Business use-case** | PA costs the US healthcare system $13B/year and is the #1 admin burden physicians cite. The CMS Interoperability and Prior Authorization rule (CMS-0057-F) mandates payer-side FHIR support by 2027. The dashboard shape — inbox of outstanding PA work across the panel — is exactly how practices actually surface this workflow today, made dramatically faster by FHIR-native data access + LLM-assisted assembly. |

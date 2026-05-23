@@ -3,9 +3,21 @@ import { fhirServerFetch, FhirError } from "@/lib/fhirServer";
 
 const ALLOWED_RESOURCES = new Set([
   "Patient",
+  "Coverage",
   "Observation",
   "Condition",
   "MedicationRequest",
+  "AllergyIntolerance",
+  "Immunization",
+  "Encounter",
+  "Procedure",
+  "DiagnosticReport",
+  "DocumentReference",
+  "Communication",
+  "Claim",
+  "Organization",
+  "Practitioner",
+  "Location",
 ]);
 
 function logFhirAccess(method: string, path: string, status: number) {

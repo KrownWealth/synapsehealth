@@ -4,8 +4,8 @@ import { AppShell } from '@/components/layout/AppShell';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'SepSofa — Sepsis Early Warning',
-  description: 'Real-time sepsis risk scoring for clinical practitioners',
+  title: 'SepSofa — Prior Authorization Accelerator',
+  description: 'Cross-patient PA worklist and Da Vinci PAS submission for clinical practitioners',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
