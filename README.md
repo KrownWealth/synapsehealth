@@ -1,8 +1,8 @@
-# PriorAuth — Prior Authorization Accelerator
+# Synapse Health — Prior Authorization Accelerator
 
-Just like a lawyer gathers every shred of evidence before stepping into court, a physician must assemble a complete clinical packet — diagnosis, supporting labs, prior failed therapies, insurance coverage, a written narrative tying it all to payer criteria — before a prescription gets approved. **PriorAuth** is the FHIR-native, AI-assisted workbench that collapses that 45-minute manual assembly into a 2-minute review.
+Just like a lawyer gathers every shred of evidence before stepping into court, a practitioner must assemble a complete clinical packet — diagnosis, medication request, supporting labs, prior failed therapies, insurance coverage, and a written narrative tying it all to the payer's medical-necessity criteria — before a high-cost prescription claim gets approved. **Synapse Health** is the FHIR-native, AI-assisted workbench that collapses that 45-minute manual assembly into a 60-second review.
 
-> **Live URL:** _add your deployment URL here after `vercel deploy`._
+> **Live URL:** https://synapshealth.vercel.app/
 
 ---
 
@@ -12,7 +12,7 @@ Just like a lawyer gathers every shred of evidence before stepping into court, a
 
 #### Identify Pain Point
 
-Prior authorization is the **#1 administrative burden in US healthcare**. Before a high-cost drug or specialist procedure can be dispensed, the payer requires the prescribing practice to submit a packet proving medical necessity:
+Prior authorization(PA) is the **#1 administrative burden in US healthcare**. Before a high-cost drug or specialist procedure can be dispensed, the payer requires the prescribing practice to submit a packet proving medical necessity:
 
 - The qualifying diagnosis with its ICD-10 code
 - Coverage details and member ID
@@ -24,7 +24,7 @@ The data already lives in the EHR as structured FHIR. The form is mechanical. Th
 
 #### Industry Context
 
-**Target Industry:** US ambulatory care, specialty practices, hospital outpatient departments, and large integrated delivery networks subject to the CMS-0057-F **Interoperability and Prior Authorization rule** (full enforcement 2027). The rule mandates that payers expose PA decisions via FHIR APIs and respond within 72 hours (urgent) or 7 days (standard) — every modern EHR already exposes the source-side clinical data via FHIR R4, so the bottleneck is no longer the data: it is the manual assembly step.
+**Target Industry:** US ambulatory care, specialty practices, hospital outpatient departments, and large integrated delivery networks subject to the CMS-0057-F **Interoperability and Prior Authorization rule** (full enforcement 2027). The rule mandates that payers expose Prior Authorization decisions via FHIR APIs and respond within 72 hours (urgent) or 7 days (standard) — every modern EHR already exposes the source-side clinical data via FHIR R4, so the bottleneck is no longer the data: it is the manual assembly step.
 
 **Target User Personas:**
 
@@ -34,8 +34,6 @@ The data already lives in the EHR as structured FHIR. The form is mechanical. Th
 | **PA clinical staff (MA / pharmacy tech / nurse)** | Assembles and submits PA packets on behalf of physicians | 45 min/PA × dozens of PAs/day = the operational bottleneck of every busy clinic. |
 | **Practice manager** | Tracks PA throughput, denials, and revenue leakage | No visibility into the work-in-flight: a denial discovered weeks later can never be appealed in time. |
 | **Compliance / quality lead** | Owns audit trails and submission provenance | Hand-written packets are inconsistent and impossible to QA at scale. |
-
-#### Current State
 
 #### Why Current Methods Are Failing
 
@@ -49,17 +47,18 @@ The data already lives in the EHR as structured FHIR. The form is mechanical. Th
 
 #### High-Level Overview
 
-PriorAuth is organized as a **cross-patient admin dashboard**. A doctor signs in and immediately sees, at a glance:
+Synapse Health is organized as a **cross-patient admin dashboard**. A doctor signs in and immediately sees, at a glance:
 
 1. **KPI tiles** — needs-review / overdue / submitted / patients-on-panel
 2. **Most-urgent worklist** — active prescriptions across the panel that have not yet been PA-submitted, sorted by urgency (`overdue ≥ 7 days`, `this-week 2–6 days`, `fresh < 2 days`) computed from `MedicationRequest.authoredOn`
-3. **Recent activity feed** — the last 5 PA Claims they have submitted, clickable to the full audit detail
+3. **Recent activity feed** — the most recent PA Claims submitted, each clickable to the full audit detail
 
 From any worklist row, the doctor lands on the patient chart and clicks **Generate PA** on the active prescription. The app:
+
 1. Runs a **server-side evidence aggregator** that fans out FHIR queries in parallel for active conditions, recent labs, prior medications, clinical notes, and Coverage
 2. Hands the structured evidence bundle to **Gemini** with a strict JSON response schema and a citation-grounding rule (every claim must reference a `resourceId` that appears in the bundle)
 3. Validates the LLM response with Zod and **rejects any citation whose `resourceId` is not in the bundle** (anti-hallucination)
-4. Renders the packet for review — diagnosis rationale, supporting evidence, prior therapy rationale, an editable cover-letter narrative, citations, and gaps
+4. Renders the packet for review — diagnosis rationale, supporting evidence, prior-therapy rationale, an editable cover-letter narrative, citations, and any evidence gaps
 
 The doctor edits if needed and clicks **Approve & Submit**. The app writes a **Da Vinci PAS-aligned `Claim`** (`use: "preauthorization"`, `type: pharmacy`) back to FHIR — the same resource shape a real payer endpoint would accept. The worklist row jumps from Needs Review to Submitted within a frame.
 
@@ -67,20 +66,20 @@ The doctor edits if needed and clicks **Approve & Submit**. The app writes a **D
 
 ##### Cost Reduction
 
-| Lever | Today | With PriorAuth | Per-PA savings |
+| Lever | Today | With Synapse Health | Per-PA savings |
 |---|---|---|---|
 | Evidence assembly | 30–40 min (multi-screen) | < 5 seconds (server-side `Promise.all` over 7 parallel FHIR fetches) | ~30 min |
 | Narrative drafting | 10–15 min | ~14 seconds (Gemini draft) + reviewer edit | ~12 min |
-| Final review + form fill | 5–10 min | 2-min review of pre-grounded packet | ~5 min |
+| Final review + form fill | 5–10 min | 2-min review of a pre-grounded packet | ~5 min |
 | **Total per PA** | **45–65 min** | **~2 min review** | **~45 min** |
 
-At ~20 PAs/day for a mid-size practice that is roughly **15 hours of recovered staff time per day**, or about **3,750 hours per year** at one practice. Scaled to a 100-practice IDN: **~375,000 staff-hours / year** = on the order of **$15–20M in operating cost** at clinical-staff loaded rates. Versus the AMA's national $13B/year figure: even a 5% reduction is $650M.
+At ~20 PAs/day for a mid-size practice that is roughly **15 hours of recovered staff time per day**, or about **3,750 hours per year** at one practice. Scaled to a 100-practice IDN: **~375,000 staff-hours/year** = on the order of **$15–20M in operating cost** at clinical-staff loaded rates. Versus the AMA's national $13B/year figure: even a 5% reduction is $650M.
 
 ##### Revenue Impact
 
 - **Faster Rx fills → less abandonment.** Today, ~30% of PA-blocked prescriptions are abandoned by the patient. Cutting PA turnaround from days to same-day directly recovers Rx revenue and downstream encounters.
 - **More patients per provider day.** Each PA hour reclaimed from physicians (the AMA estimates 16 hrs/week of physician time on PA) can be reinvested in a billable encounter slot.
-- **Lower denial rate.** Citation-grounded narratives + structured Da Vinci PAS shape historically lower denial rates by 10–20% versus hand-written submissions, recapturing downstream revenue that would otherwise leak as appeals or write-offs.
+- **Lower denial rate.** Citation-grounded narratives + the structured Da Vinci PAS shape historically lower denial rates by 10–20% versus hand-written submissions, recapturing downstream revenue that would otherwise leak as appeals or write-offs.
 
 #### Key Differentiators & Innovation
 
@@ -88,18 +87,18 @@ At ~20 PAs/day for a mid-size practice that is roughly **15 hours of recovered s
 - **Da Vinci PAS standard compliance** — the submission is a real `Claim` with `use: "preauthorization"`, `type: pharmacy`, `prescription` reference, `insurance.coverage`, `provider`, and `supportingInfo` containing both the narrative (`valueString`) and each citation as a `valueReference`. Drop-in compatible with a real payer's PAS endpoint.
 - **Inbox-first dashboard** — no patient-by-patient hunt. Every active prescription across the panel is one click away.
 - **BFF + server-only secrets** — the FHIR base URL, FHIR bearer token, and Gemini API key never reach the browser bundle. Verified: `grep -rE "GEMINI_API_KEY|AIza[0-9A-Za-z_-]{30}" .next/static/chunks/` returns nothing.
-- **Self-healing Coverage** — Da Vinci PAS requires `Claim.insurance.coverage` to point at a `Coverage` resource. If the patient has none, an `ensureCoverage()` helper creates a minimal self-pay Coverage (`type: pay` from HL7 v3-ActCode) before submission — honors the standard cardinality without fabricating insurer data.
+- **Self-healing Coverage** — Da Vinci PAS requires `Claim.insurance.coverage` to point at a `Coverage` resource. If the patient has none, an `ensureCoverage()` helper creates a minimal self-pay Coverage (`type: pay` from HL7 v3-ActCode) before submission — honors the standard's cardinality without fabricating insurer data.
 - **Two-stage parallel server prefetch** — patients (Stage 1) → active meds + PA claims in parallel (Stage 2), using FHIR comma-OR list syntax (`?patient=Patient/A,Patient/B,…`) to avoid N+1.
 - **Anti-hallucination by construction** — the LLM never queries FHIR. The aggregator runs first in deterministic code; the LLM is a writer that only sees what the aggregator hands it.
 
 #### End-User Experience Walkthrough
 
-1. **Sign in** → enter `demo` / `demo123` at `/login`. A 7-day HttpOnly cookie is set; middleware now unblocks the rest of the app.
-2. **Dashboard (`/`)** → 4 KPI tiles + the 5 most-urgent worklist preview + recent-activity feed (each entry deep-links to its Claim audit record).
+1. **Sign in** → enter `username` / `password` at `/login`. A 7-day HttpOnly cookie is set; middleware now unblocks the rest of the app.
+2. **Dashboard (`/`)** → 4 KPI tiles + a "Most urgent (prior authorizations)" preview (top 5 with a link to the full list) + a recent-activity feed (each entry deep-links to its Claim audit record).
 3. **Doctor Task List (`/medication/task-list`)** → the full active worklist. Click any row to land on the patient chart.
-4. **Patient chart (`/patients/{id}`)** → sticky demographics card (with **Edit** button) + a tabbed medical history (Overview · Conditions · Medications · Observations · Allergies · Immunizations · Encounters · Procedures · Reports · Claims). The Overview tab shows summary cards with active diagnoses, active meds, allergies, last encounter, recent labs (with red-pill markers for out-of-range values), and a coverage pointer.
-5. **Generate PA** → click `[Generate PA]` on an active MedicationRequest row → modal opens with the AI-draft banner, evidence summary, three rationale paragraphs, gaps banner (when evidence is incomplete), an editable cover-letter narrative pre-filled with the AI draft, and a collapsible Citations disclosure.
-6. **Approve & Submit** → modal swaps to a confirmation panel showing `Claim/{id}` and a sent timestamp. Dashboard worklist refreshes automatically; the row moves from Needs Review to Submitted.
+4. **Patient chart (`/patients/{id}`)** → an IPS-style patient header (avatar, MRN, DOB, sex, "International Patient Summary" tag, **Edit** action) followed by a 2-column responsive grid of section cards: **Conditions · Allergies & Intolerances · Medications · Observations · Immunizations · Encounters · Procedures · Diagnostic Reports · Claims**. Each card carries its LOINC IPS section code, an entries count, and a scrollable table with a sticky header. Out-of-range labs are pill-marked red; status badges are color-coded across all sections.
+5. **Generate PA** → click `[Generate PA]` on an active Medication row → modal opens with the AI-draft banner, evidence summary, three rationale paragraphs, a gaps banner (when evidence is incomplete), an editable cover-letter narrative pre-filled with the AI draft, and a collapsible Citations disclosure.
+6. **Approve & Submit** → modal swaps to a confirmation panel showing `Claim/{id}` and a sent timestamp. The dashboard worklist refreshes automatically; the row moves from Needs Review to Submitted.
 7. **Prior Auth outbox (`/medication/prior-auth`)** → sortable table of every PA Claim sent. Click any row → full PA detail page with the cover-letter narrative, citations table, payer metadata, and a deep link back to the patient chart.
 
 #### Core Features Showcase for New Patient Registration
@@ -111,7 +110,7 @@ At ~20 PAs/day for a mid-size practice that is roughly **15 hours of recovered s
   - Phone, Email (optional; email format checked against `x@y.z` pattern)
   - Address (street, city, state, postal code, country)
   - Marital status (HL7 v3-MaritalStatus codes)
-- **Edit patient** — Pencil icon on the patient detail page opens an EditPatientModal pre-filled with `formFromPatient()`. Submit issues a `PUT /Patient/{id}` via the BFF; the FHIR server increments `meta.versionId`. Fields the form does not touch (identifiers, languages, photo) are preserved by spreading the existing resource.
+- **Edit patient** — the Edit action on each row of the patient list, and the pencil icon on the patient detail page, both open an EditPatientModal pre-filled with `formFromPatient()`. Submit issues a `PUT /Patient/{id}` via the BFF; the FHIR server increments `meta.versionId`. Fields the form does not touch (identifiers, languages, photo) are preserved by spreading the existing resource.
 - **Search by name** — debounced (300 ms) input on `/patients`. Hits `GET /Patient?name=…&_count=50` server-side. Local and remote results are merged into a deduplicated list.
 - **Validation surface** — field-level red borders + `aria-invalid` + inline error messages. Errors are shown after the first submit attempt and update live as the user fixes them; submit is blocked while any error remains.
 
@@ -138,7 +137,7 @@ At ~20 PAs/day for a mid-size practice that is roughly **15 hours of recovered s
    ┌────────────────────────────────────────────────────────────┐
    │  Next.js 14 App Router (server)                            │
    │                                                            │
-   │   middleware.ts  ──── gates every path on `sepsofa-session`│
+   │   middleware.ts  ──── gates every path on a session cookie │
    │        │                                                   │
    │        ├──► /login, /api/auth/*       (public)             │
    │        │                                                   │
@@ -157,7 +156,7 @@ At ~20 PAs/day for a mid-size practice that is roughly **15 hours of recovered s
              ▼                               ▼
   ┌─────────────────────────┐    ┌──────────────────────────────┐
   │  FHIR R4 server         │    │  Gemini API                  │
-  │  (Medblocks / HAPI)     │    │  gemini-2.5-flash (default)  │
+  │  (Medblocks)            │    │  gemini-2.5-flash (default)  │
   │                         │    │  responseSchema (strict JSON)│
   │  Patient / Condition /  │    │  ↑ called server-side only   │
   │  Observation /          │    │                              │
@@ -170,8 +169,8 @@ At ~20 PAs/day for a mid-size practice that is roughly **15 hours of recovered s
 
 **Read path (dashboard load):**
 
-1. Browser → `GET /` (with `sepsofa-session` cookie)
-2. Middleware validates cookie. Cookie present → pass through.
+1. Browser → `GET /` (with the session cookie)
+2. Middleware validates the cookie. Cookie present → pass through.
 3. Server Component for `/` runs:
    - Creates a fresh `QueryClient`
    - **Stage 1:** `getPatients(0)` against the FHIR server → seeds `['patients', 0]` cache
@@ -184,9 +183,9 @@ At ~20 PAs/day for a mid-size practice that is roughly **15 hours of recovered s
 1. Doctor clicks **Approve & Submit** in the JustificationModal
 2. `useSubmitPriorAuth()` mutation → `POST /api/prior-auth/submit` with `{patientId, medicationRequestId, narrative, justification}`
 3. Submit route:
-   - Validates body with Zod (`SubmitInputSchema`)
+   - Validates the body with Zod (`SubmitInputSchema`)
    - Fetches the MedicationRequest to lift `requester` (→ `Claim.provider`) and the RxNorm coding (→ `Claim.item[0].productOrService`)
-   - Calls `ensureCoverage(patientId)` — returns existing active Coverage's id, or POSTs a minimal self-pay Coverage and returns the new id
+   - Calls `ensureCoverage(patientId)` — returns the existing active Coverage id, or POSTs a minimal self-pay Coverage and returns the new id
    - Constructs the Da Vinci PAS Claim (status=active, use=preauthorization, type=pharmacy, patient, created, provider, priority=normal, insurance, prescription, item, supportingInfo)
    - POSTs to `/Claim` via the same BFF helper (`fhirServerFetch`)
    - Returns `{ claimId, reference, created, coverageId }` to the client
@@ -216,54 +215,54 @@ At ~20 PAs/day for a mid-size practice that is roughly **15 hours of recovered s
 | LLM | **Gemini** via `@google/genai` 2.6 | Strict `responseSchema`, server-side, env-driven model selection (`GEMINI_MODEL`) |
 | Validation | **Zod 4** | Justification response validation + submit-input validation |
 | Auth | Hardcoded credentials + HttpOnly cookie | Simple demo gate — no IAM provider needed |
-| FHIR backend | Open HAPI tenant (Medblocks) | R4 baseline; configurable to any R4 server via `FHIR_BASE_URL` |
+| FHIR backend | Public Medblocks R4 tenant | Configurable to any R4 server via `FHIR_BASE_URL` |
 | Deploy target | **Vercel** (recommended) | Native Next.js support, edge middleware, env-var injection |
 | Local dev | `npm run dev` → http://localhost:3000 | Hot module reload; Next.js dev server falls back to 3001/3002 if 3000 is taken |
 
 ---
 
-## 3.2 Security, Compliance,
+## 3.0 Security & Compliance
 
 ### Authentication & Authorization (IAM)
 
 | Concern | How it's implemented |
 |---|---|
-| Gate every route | `middleware.ts` runs on every request. Allowlist: `/login`, `/api/auth/login`, `/api/auth/logout`, Next.js internals. Everything else requires the `sepsofa-session` cookie. |
-| Credential storage | `AUTH_USERNAME` / `AUTH_PASSWORD` env vars; defaults to `demo` / `demo123` if unset. Hardcoded by design — this is a demo. Replace with stronger values (or a real IAM provider) before sharing the URL publicly. |
-| Session cookie | `sepsofa-session` — **HttpOnly** (JS cannot read), `SameSite=Lax`, `Secure` in production, 7-day max-age, `path=/` |
+| Gate every route | `middleware.ts` runs on every request. Allowlist: `/login`, `/api/auth/login`, `/api/auth/logout`, Next.js internals. Everything else requires a session cookie. |
+| Credential storage | `AUTH_USERNAME` / `AUTH_PASSWORD` env vars; defaults to `username` / `password` if unset. Hardcoded by design — this is a demo. Replace with stronger values (or a real IAM provider) before sharing the URL publicly. |
+| Session cookie | **HttpOnly** (JS cannot read), `SameSite=Lax`, `Secure` in production, 7-day max-age, `path=/`. |
 | API gate behavior | API routes return **401 JSON** when unauthenticated (no redirect — preserves the JSON contract for the client mutation hooks). HTML pages **307 redirect** to `/login?redirect=<original-path>` so the user lands on the page they wanted after sign-in. |
 | Secret protection | `FHIR_BASE_URL`, `FHIR_SERVER_TOKEN`, `GEMINI_API_KEY`, `AUTH_PASSWORD` — all server-only, no `NEXT_PUBLIC_` prefix. Verified absent from `.next/static/chunks/*.js`. The Gemini SDK lives behind `import 'server-only'`. |
-| FHIR write allowlist | `/api/fhir/[...path]/route.ts` enforces a `ALLOWED_RESOURCES` set. Any resource type not on the list returns 403. Only `GET`/`POST`/`PUT` are exported (no `DELETE`). |
-| Audit trail | Every PA submission writes a **Da Vinci PAS `Claim`** to FHIR with `created` timestamp, `provider` reference, full narrative as `supportingInfo[].valueString`, and every cited resource as `supportingInfo[].valueReference`. The PA outbox + detail page are the human-readable audit view; the FHIR resource is the durable record. |
+| FHIR write allowlist | `/api/fhir/[...path]/route.ts` enforces an `ALLOWED_RESOURCES` set. Any resource type not on the list returns 403. Only `GET` / `POST` / `PUT` are exported (no `DELETE`). |
+| Audit trail | Every PA submission writes a **Da Vinci PAS `Claim`** to FHIR with a `created` timestamp, a `provider` reference, the full narrative as `supportingInfo[].valueString`, and every cited resource as `supportingInfo[].valueReference`. The PA outbox + detail page are the human-readable audit view; the FHIR resource is the durable record. |
 
 #### Login flow
 
 ```
 1.  User → GET /  (no cookie)
         ▼
-2.  middleware.ts → no `sepsofa-session` → 307 redirect to
-                                          /login?redirect=%2F
+2.  middleware.ts → no session cookie → 307 redirect to
+                                        /login?redirect=%2F
         ▼
 3.  User → GET /login?redirect=/   →   200 (login page renders;
                                             no AppShell because /login
                                             is outside the (app) route group)
         ▼
-4.  User submits demo / demo123
+4.  User submits username / password
         ▼
 5.  Client → POST /api/auth/login
-              { username: "demo", password: "demo123" }
+              { username: "username", password: "password" }
         ▼
 6.  Route handler validates against AUTH_USERNAME/AUTH_PASSWORD
         ▼
    ┌── valid ───────────────────┬── invalid ──────────────────┐
-   │ Set-Cookie: sepsofa-session│ 401 { error: "Invalid       │
-   │   = demo;  HttpOnly;       │   username or password" }   │
-   │   SameSite=Lax;            │   → form shows red error    │
-   │   Max-Age=604800;          │                             │
-   │   Secure (in prod)         │                             │
-   │ 200 { ok: true,            │                             │
-   │       username: "demo" }   │                             │
-   └─────────────┬──────────────┴─────────────────────────────┘
+   │ Set-Cookie: session         │ 401 { error: "Invalid       │
+   │   = demo;  HttpOnly;        │   username or password" }   │
+   │   SameSite=Lax;             │   → form shows red error    │
+   │   Max-Age=604800;           │                             │
+   │   Secure (in prod)          │                             │
+   │ 200 { ok: true,             │                             │
+   │       username: "demo" }    │                             │
+   └─────────────┬───────────────┴─────────────────────────────┘
                  ▼
 7.  Client → router.replace("/")  +  router.refresh()
         ▼
@@ -272,7 +271,7 @@ At ~20 PAs/day for a mid-size practice that is roughly **15 hours of recovered s
         ▼
 9.  Sign Out (sidebar footer)
         → POST /api/auth/logout  →  Set-Cookie clears
-        → queryClient.clear()  (drop all cached FHIR data)
+        → queryClient.clear()    (drop all cached FHIR data)
         → router.replace("/login")
 ```
 
@@ -298,8 +297,8 @@ npm run dev
 # → http://localhost:3000  (or 3001/3002 if 3000 is occupied)
 
 # 4. Sign in
-# username: demo
-# password: demo123
+# username: 
+# password: 
 ```
 
 ### Build / verify
@@ -316,57 +315,69 @@ npm run lint        # next lint
 
 ```
 app/
-├── layout.tsx              QueryProvider only (no shell)
-├── login/page.tsx          Public login screen
-├── (app)/                  Gated route group; layout = AppShell
-│   ├── page.tsx            Dashboard (KPIs + Top 5 + Recent activity)
+├── layout.tsx                   QueryProvider only (no shell)
+├── login/page.tsx               Public login screen
+├── (app)/                       Gated route group; layout = AppShell
+│   ├── layout.tsx
+│   ├── page.tsx                 Dashboard (KPIs + Most urgent + Recent activity)
 │   ├── patients/
-│   │   ├── page.tsx        Searchable patient list + Add Patient
-│   │   └── [id]/page.tsx   Demographics + tabbed history + Edit + PA modal
+│   │   ├── page.tsx             Patient list (table + search + Add Patient)
+│   │   └── [id]/page.tsx        Patient detail (IPS header + section grid)
 │   └── medication/
-│       ├── task-list/page.tsx
+│       ├── task-list/page.tsx   Full worklist
 │       └── prior-auth/
-│           ├── page.tsx              Outbox
-│           └── [claimId]/page.tsx    PA detail
+│           ├── page.tsx                Outbox
+│           └── [claimId]/page.tsx      PA detail
 └── api/
     ├── auth/{login,logout}/route.ts
-    ├── fhir/[...path]/route.ts        BFF with resource allowlist
+    ├── fhir/[...path]/route.ts                        BFF with resource allowlist
     └── prior-auth/{evidence,generate,submit}/route.ts
 
 components/
 ├── auth/LoginForm.tsx
 ├── layout/{AppShell,Sidebar,MobileNav}.tsx
 ├── dashboard/{DashboardHome,KpiTiles,PaWorklist,RecentActivity}.tsx
-├── history/{HistoryTabs,OverviewTab,RichRow,RichResourceList}.tsx
-├── patients/{PatientListClient,PatientCard,PatientDemographics,
-│              PatientForm,CreatePatientModal,EditPatientModal,
-│              AddPatientButton,PatientDetailClient}.tsx
+├── history/
+│   ├── IpsSectionCard.tsx
+│   └── ips/{ConditionsSection,AllergiesSection,OtherSections,Pill}.tsx
+├── patients/
+│   ├── PatientListClient.tsx
+│   ├── PatientTable.tsx
+│   ├── PatientIpsHeader.tsx
+│   ├── PatientDetailClient.tsx
+│   ├── PatientForm.tsx
+│   ├── CreatePatientModal.tsx
+│   ├── EditPatientModal.tsx
+│   ├── AddPatientButton.tsx
+│   └── SearchBar.tsx
 ├── priorAuth/{GeneratePaButton,JustificationModal}.tsx
 ├── medication/{TaskListClient,PriorAuthOutbox}.tsx
-└── ui/{Modal,QueryProvider,SkeletonCard,ErrorPanel,EmptyState,SearchBar}.tsx
+└── ui/{Modal,QueryProvider,SkeletonCard,ErrorPanel,EmptyState}.tsx
 
 lib/
-├── fhirServer.ts           server-only FHIR transport
-├── fhirClient.ts           browser-side proxy through BFF
-├── patientForm.ts          form ↔ FHIR Patient + validation
-├── dashboardUtils.ts       buildWorklist, computeKpis
-├── historyExtract.ts       per-resource row extractors
-├── resourceSummaries.ts    short title/meta extractors
-├── dateUtils.ts            age, formatDate, formatRelative
-├── patientUtils.ts         fullName, initials, bundle helpers
+├── fhirServer.ts                server-only FHIR transport
+├── fhirClient.ts                browser-side proxy through BFF
+├── patientForm.ts               form ↔ FHIR Patient + validation
+├── dashboardUtils.ts            buildWorklist, computeKpis
+├── historyExtract.ts            per-resource row extractors
+├── resourceSummaries.ts         short title/meta extractors
+├── dateUtils.ts                 age, formatDate, formatRelative
+├── patientUtils.ts              fullName, initials, bundle helpers
 └── priorAuth/
-    ├── evidence.ts         gatherEvidence (server-only)
-    ├── coverage.ts         ensureCoverage helper
-    └── schema.ts           Zod JustificationSchema
+    ├── evidence.ts              gatherEvidence (server-only)
+    ├── coverage.ts              ensureCoverage helper
+    └── schema.ts                Zod JustificationSchema
 
 hooks/
-├── usePatients.ts, usePatientDetail.ts, useDashboard.ts
-├── usePriorAuth.ts         generate + submit mutations
-└── usePatientMutations.ts  create + update mutations
+├── usePatients.ts
+├── usePatientDetail.ts
+├── useDashboard.ts
+├── usePriorAuth.ts              generate + submit mutations
+└── usePatientMutations.ts       create + update mutations
 
-types/priorAuth.ts          EvidenceBundle, Citation, Justification
+types/priorAuth.ts               EvidenceBundle, Citation, Justification
 
-middleware.ts               session cookie gate
+middleware.ts                    session cookie gate
 ```
 
 ---
@@ -380,5 +391,5 @@ middleware.ts               session cookie gate
 | `FHIR_TIMEOUT_MS` | no | `30000` | Per-request FHIR fetch timeout (ms). Bump for slow public tenants. |
 | `GEMINI_API_KEY` | yes for the PA feature | (none) | Used by the justification generator. Server-only. |
 | `GEMINI_MODEL` | no | `gemini-2.5-flash` | Override to `gemini-2.5-pro` (or another available model) once billing is enabled. |
-| `AUTH_USERNAME` | no | `demo` | Login username. |
-| `AUTH_PASSWORD` | no | `demo123` | Login password. **Replace before sharing the demo URL publicly.** |
+| `AUTH_USERNAME` | no | `username` | Login username. |
+| `AUTH_PASSWORD` | no | `password` | Login password. **Replace before sharing the demo URL publicly.** |

@@ -15,8 +15,8 @@ export function MobileNav() {
             <Activity className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold leading-tight text-slate-900">SepSofa</p>
-            <p className="truncate text-[10px] leading-tight text-slate-500">PA Accelerator</p>
+            <p className="truncate text-sm font-semibold leading-tight text-slate-900">Synapse Health</p>
+            <p className="truncate text-[10px] leading-tight text-slate-500">Prior Auth Accelerator</p>
           </div>
         </Link>
 

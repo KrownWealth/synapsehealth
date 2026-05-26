@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-const COOKIE_NAME = 'sepsofa-session';
+const COOKIE_NAME = 'synpase_demo_auth';
 
 export async function POST() {
   const res = NextResponse.json({ ok: true });

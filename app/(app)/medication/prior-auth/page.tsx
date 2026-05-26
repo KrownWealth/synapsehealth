@@ -7,7 +7,7 @@ import {
 import { patientsFromBundle } from '@/lib/patientUtils';
 import { PriorAuthOutbox } from '@/components/medication/PriorAuthOutbox';
 
-export const metadata = { title: 'Prior Auth — SepSofa' };
+export const metadata = { title: 'Prior Auth — Synapse Health' };
 export const dynamic = 'force-dynamic';
 
 export default async function PriorAuthOutboxPage() {

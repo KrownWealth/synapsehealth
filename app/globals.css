@@ -27,3 +27,41 @@ html, body {
 * {
   box-sizing: border-box;
 }
+
+/* ───── Custom scrollbars ─────
+ * Thin, slate-toned scrollbars that match the rest of the UI. Applied globally
+ * so every scroll container (IPS section cards, modals, tables) looks the same.
+ * Firefox uses `scrollbar-width` / `scrollbar-color`; WebKit/Blink use the
+ * `::-webkit-scrollbar` pseudo-element family.
+ */
+
+/* Firefox + modern browsers */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(203 213 225) transparent; /* slate-300 thumb, transparent track */
+}
+
+/* WebKit / Blink */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: rgb(203 213 225); /* slate-300 */
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(148 163 184); /* slate-400 */
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}

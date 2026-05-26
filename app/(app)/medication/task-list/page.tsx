@@ -7,7 +7,7 @@ import {
 import { patientsFromBundle } from '@/lib/patientUtils';
 import { TaskListClient } from '@/components/medication/TaskListClient';
 
-export const metadata = { title: 'Doctor Task List — SepSofa' };
+export const metadata = { title: 'Doctor Task List — Synapse Health' };
 export const dynamic = 'force-dynamic';
 
 export default async function TaskListPage() {

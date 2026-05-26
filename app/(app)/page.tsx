@@ -7,7 +7,7 @@ import {
 import { patientsFromBundle } from '@/lib/patientUtils';
 import { DashboardHome } from '@/components/dashboard/DashboardHome';
 
-export const metadata = { title: 'Dashboard — SepSofa' };
+export const metadata = { title: 'Dashboard — Synapse Health' };
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {

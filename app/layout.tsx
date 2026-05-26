@@ -3,7 +3,7 @@ import { QueryProvider } from '@/components/ui/QueryProvider';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'SepSofa — Prior Authorization Accelerator',
+  title: 'Synapse Health — Prior Authorization Accelerator',
   description: 'Cross-patient PA worklist and Da Vinci PAS submission for clinical practitioners',
 };
 

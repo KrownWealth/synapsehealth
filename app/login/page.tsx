@@ -16,14 +16,14 @@ export default function LoginPage({
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600 text-white">
             <Activity className="h-5 w-5" />
           </div>
-          <p className="text-lg font-semibold text-slate-900">PriorAuth</p>
+          <p className="text-lg font-semibold text-slate-900">Synapse Health</p>
           <p className="text-xs text-slate-500">Prior Authorization Accelerator</p>
         </div>
 
         <LoginForm redirectTo={searchParams.redirect ?? '/'} />
 
         <p className="text-center text-[11px] text-slate-400">
-          Demo credentials <strong>username: demo</strong> and <strong>password: demo123</strong>
+          Demo credentials <strong>username: synapse</strong> and <strong>password: synapse123</strong>
         </p>
       </div>
     </div>

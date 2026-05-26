@@ -46,7 +46,7 @@ export function DashboardHome() {
             isLoading={dashboardLoading}
             error={dashboardError}
             limit={5}
-            headingLabel="Most urgent"
+            headingLabel="Most urgent (prior authorizations)"
           />
           {openCount > 5 && (
             <Link

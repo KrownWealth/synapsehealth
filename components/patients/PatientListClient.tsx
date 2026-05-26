@@ -5,9 +5,10 @@ import { useQuery } from '@tanstack/react-query';
 import { usePatients } from '@/hooks/usePatients';
 import { searchPatientsByNameClient } from '@/lib/fhirClient';
 import { patientsFromBundle, fullName } from '@/lib/patientUtils';
-import { PatientCard } from './PatientCard';
+import { PatientTable } from './PatientTable';
+import { EditPatientModal } from './EditPatientModal';
 import { SearchBar } from './SearchBar';
-import { SkeletonGrid } from '@/components/ui/SkeletonCard';
+import { SkeletonCard } from '@/components/ui/SkeletonCard';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { EmptyState } from '@/components/ui/EmptyState';
 
@@ -15,6 +16,7 @@ export function PatientListClient() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [editingPatient, setEditingPatient] = useState<fhir4.Patient | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -65,7 +67,7 @@ export function PatientListClient() {
       <SearchBar value={search} onChange={setSearch} />
 
       {list.isLoading && !list.data ? (
-        <SkeletonGrid count={6} />
+        <SkeletonCard />
       ) : list.error ? (
         <ErrorPanel
           title="Could not load patients"
@@ -82,9 +84,7 @@ export function PatientListClient() {
           {showingFromServerSearch && (
             <p className="text-xs text-slate-500">Searching FHIR server…</p>
           )}
-          {filtered.map((p) => (
-            <PatientCard key={p.id} patient={p} />
-          ))}
+          <PatientTable patients={filtered} onEdit={(p) => setEditingPatient(p)} />
         </div>
       )}
 
@@ -109,6 +109,12 @@ export function PatientListClient() {
           </button>
         </div>
       )}
+
+      <EditPatientModal
+        open={editingPatient !== null}
+        onClose={() => setEditingPatient(null)}
+        patient={editingPatient ?? undefined}
+      />
     </div>
   );
 }

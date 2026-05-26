@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Pencil } from 'lucide-react';
 import { usePatientDetail } from '@/hooks/usePatientDetail';
-import { PatientDemographics } from './PatientDemographics';
+import { PatientIpsHeader } from './PatientIpsHeader';
 import { EditPatientModal } from './EditPatientModal';
 import { HistoryTabs } from '@/components/history/HistoryTabs';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
@@ -23,10 +23,10 @@ export function PatientDetailClient({ patientId }: { patientId: string }) {
     );
   }
 
-  const renderMedicationAction = (r: fhir4.Resource) => {
-    if (r.resourceType !== 'MedicationRequest') return null;
-    return <GeneratePaButton patientId={patientId} medicationRequest={r as fhir4.MedicationRequest} />;
-  };
+  const renderMedicationAction = (m: fhir4.MedicationRequest) =>
+    m.status === 'active' ? (
+      <GeneratePaButton patientId={patientId} medicationRequest={m} />
+    ) : null;
 
   return (
     <div className="space-y-5">
@@ -49,7 +49,7 @@ export function PatientDetailClient({ patientId }: { patientId: string }) {
         </button>
       </div>
 
-      <PatientDemographics patient={detail.patient.data} />
+      <PatientIpsHeader patient={detail.patient.data} />
 
       <EditPatientModal
         open={editOpen}
@@ -57,7 +57,11 @@ export function PatientDetailClient({ patientId }: { patientId: string }) {
         patient={detail.patient.data}
       />
 
-      <HistoryTabs detail={detail} renderMedicationAction={renderMedicationAction} />
+      <HistoryTabs
+        patientId={patientId}
+        detail={detail}
+        renderMedicationAction={renderMedicationAction}
+      />
     </div>
   );
 }

@@ -68,14 +68,14 @@ export function PaWorklist({
 
   return (
     <section aria-labelledby="worklist-heading" className="space-y-3">
-      <div>
+      <div className="flex items-baseline justify-between gap-2">
         <h2 id="worklist-heading" className="text-sm font-semibold uppercase tracking-wide text-slate-500">
           {isPreview ? headingLabel : `${headingLabel} (${totalLabel})`}
         </h2>
         {isPreview && !isLoading && (
-          <p className="mt-0.5 text-xs text-slate-500">
-            Showing {Math.min(limit, visible.length)} of {open.length} prescriptions needing review
-          </p>
+          <span className="text-xs text-slate-500">
+            {Math.min(limit, visible.length)} of {open.length} needing review
+          </span>
         )}
       </div>
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const COOKIE_NAME = 'sepsofa-session';
+const COOKIE_NAME = 'synpase_demo_auth';
 
 const PUBLIC_PATHS = new Set<string>([
   '/login',

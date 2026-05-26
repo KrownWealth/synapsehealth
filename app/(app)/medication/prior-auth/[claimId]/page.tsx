@@ -5,7 +5,7 @@ import { formatDateTime } from '@/lib/dateUtils';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Prior Auth Detail — SepSofa' };
+export const metadata = { title: 'Prior Auth Detail — Synapse Health' };
 
 function refTail(ref: string | undefined): string | undefined {
   if (!ref) return undefined;

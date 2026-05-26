@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, XCircle } from 'lucide-react';
+import { Eye, EyeOff, Loader2, XCircle } from 'lucide-react';
 
 export function LoginForm({ redirectTo }: { redirectTo: string }) {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,15 +57,31 @@ export function LoginForm({ redirectTo }: { redirectTo: string }) {
         <label htmlFor="password" className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
           Password
         </label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-        />
+        <div className="relative mt-1">
+          <input
+            id="password"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-3 py-1.5 pr-9 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            aria-pressed={showPassword}
+            tabIndex={-1}
+            className="absolute inset-y-0 right-0 flex items-center px-2 text-slate-400 hover:text-slate-600 focus:outline-none focus:text-slate-600"
+          >
+            {showPassword ? (
+              <EyeOff className="h-4 w-4" aria-hidden={true} />
+            ) : (
+              <Eye className="h-4 w-4" aria-hidden={true} />
+            )}
+          </button>
+        </div>
       </div>
 
       {error && (

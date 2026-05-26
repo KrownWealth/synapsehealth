@@ -41,11 +41,10 @@ function NavLink({
     <Link
       href={href}
       onClick={onNavigate}
-      className={`group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-        active
-          ? 'bg-indigo-50 font-medium text-indigo-700'
-          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-      }`}
+      className={`group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${active
+        ? 'bg-indigo-50 font-medium text-indigo-700'
+        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+        }`}
     >
       <Icon
         className={`h-4 w-4 flex-shrink-0 ${active ? 'text-indigo-700' : 'text-slate-400 group-hover:text-slate-600'}`}
@@ -53,9 +52,8 @@ function NavLink({
       <span className="flex-1 truncate">{label}</span>
       {count != null && count > 0 && (
         <span
-          className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-            active ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
-          }`}
+          className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${active ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
+            }`}
         >
           {count}
         </span>
@@ -109,7 +107,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <Activity className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold leading-tight text-slate-900">SepSofa</p>
+          <p className="truncate text-sm font-semibold leading-tight text-slate-900">Synapse Health</p>
           <p className="truncate text-[11px] leading-tight text-slate-500">PA Accelerator</p>
         </div>
       </div>

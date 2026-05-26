@@ -3,7 +3,7 @@ import { getPatients } from '@/lib/fhirServer';
 import { PatientListClient } from '@/components/patients/PatientListClient';
 import { AddPatientButton } from '@/components/patients/AddPatientButton';
 
-export const metadata = { title: 'Patient List — SepSofa' };
+export const metadata = { title: 'Patient List — Synapse Health' };
 export const dynamic = 'force-dynamic';
 
 export default async function PatientsPage() {
